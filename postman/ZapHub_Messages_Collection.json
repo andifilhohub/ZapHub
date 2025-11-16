@@ -1,0 +1,1012 @@
+{
+  "info": {
+    "name": "ZapHub - Complete API Collection",
+    "description": "Coleção completa para testar o ZapHub WhatsApp API:\n\n📨 MENSAGENS (9 tipos):\n- Text, Image, Video, Audio, Document\n- Location, Contact, Reaction, Template\n\n🔔 EVENTOS NATIVOS:\n- Presence (typing, recording, online/offline)\n- Message Receipts (read/delivery confirmations)\n- Reactions (emoji reactions)\n- Calls (voice/video call events)\n- Groups (participants & metadata changes)\n\n📊 CONSULTAS:\n- Get Events (com filtros por tipo e data)\n- Get Calls History (com filtros por status e tipo)\n\n🔧 GERENCIAMENTO:\n- Session creation and QR code\n- Webhook configuration\n- Idempotency testing",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "api_key",
+      "value": "test-api-key-12345",
+      "type": "string"
+    },
+    {
+      "key": "session_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "recipient",
+      "value": "5511999999999@s.whatsapp.net",
+      "type": "string"
+    },
+    {
+      "key": "message_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{api_key}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "0. Setup",
+      "item": [
+        {
+          "name": "Create Session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('session_id', response.id);",
+                  "    console.log('Session ID:', response.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Postman Test Session\",\n  \"webhookUrl\": \"https://webhook.site/your-unique-url\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/sessions",
+              "host": ["{{base_url}}"],
+              "path": ["sessions"]
+            }
+          }
+        },
+        {
+          "name": "Get QR Code",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/sessions/{{session_id}}/qr",
+              "host": ["{{base_url}}"],
+              "path": ["sessions", "{{session_id}}", "qr"]
+            }
+          }
+        },
+        {
+          "name": "Check Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/sessions/{{session_id}}/status",
+              "host": ["{{base_url}}"],
+              "path": ["sessions", "{{session_id}}", "status"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Text Message",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "pm.collectionVariables.set('message_id', 'msg-text-' + Date.now());"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 201', function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test('Message queued successfully', function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.status).to.equal('queued');",
+              "    pm.expect(response.message_type).to.equal('text');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"messageId\": \"{{message_id}}\",\n  \"to\": \"{{recipient}}\",\n  \"type\": \"text\",\n  \"text\": \"Olá! Esta é uma mensagem de teste enviada via Postman 📱\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/sessions/{{session_id}}/messages",
+          "host": ["{{base_url}}"],
+          "path": ["sessions", "{{session_id}}", "messages"]
+        }
+      }
+    },
+    {
+      "name": "2. Image Message",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "pm.collectionVariables.set('message_id', 'msg-image-' + Date.now());"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"messageId\": \"{{message_id}}\",\n  \"to\": \"{{recipient}}\",\n  \"type\": \"image\",\n  \"image\": {\n    \"url\": \"https://picsum.photos/800/600\",\n    \"caption\": \"Imagem de teste enviada via ZapHub API 🖼️\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/sessions/{{session_id}}/messages",
+          "host": ["{{base_url}}"],
+          "path": ["sessions", "{{session_id}}", "messages"]
+        }
+      }
+    },
+    {
+      "name": "3. Video Message",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "pm.collectionVariables.set('message_id', 'msg-video-' + Date.now());"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"messageId\": \"{{message_id}}\",\n  \"to\": \"{{recipient}}\",\n  \"type\": \"video\",\n  \"video\": {\n    \"url\": \"https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4\",\n    \"caption\": \"Vídeo de teste 🎥\",\n    \"gifPlayback\": false\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/sessions/{{session_id}}/messages",
+          "host": ["{{base_url}}"],
+          "path": ["sessions", "{{session_id}}", "messages"]
+        }
+      }
+    },
+    {
+      "name": "4. Audio Message (PTT)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "pm.collectionVariables.set('message_id', 'msg-audio-' + Date.now());"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"messageId\": \"{{message_id}}\",\n  \"to\": \"{{recipient}}\",\n  \"type\": \"audio\",\n  \"audio\": {\n    \"url\": \"https://www2.cs.uic.edu/~i101/SoundFiles/StarWars60.wav\",\n    \"ptt\": true\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/sessions/{{session_id}}/messages",
+          "host": ["{{base_url}}"],
+          "path": ["sessions", "{{session_id}}", "messages"]
+        }
+      }
+    },
+    {
+      "name": "5. Document Message (PDF)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "pm.collectionVariables.set('message_id', 'msg-doc-' + Date.now());"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"messageId\": \"{{message_id}}\",\n  \"to\": \"{{recipient}}\",\n  \"type\": \"document\",\n  \"document\": {\n    \"url\": \"https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf\",\n    \"fileName\": \"documento-teste.pdf\",\n    \"mimetype\": \"application/pdf\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/sessions/{{session_id}}/messages",
+          "host": ["{{base_url}}"],
+          "path": ["sessions", "{{session_id}}", "messages"]
+        }
+      }
+    },
+    {
+      "name": "6. Location Message",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "pm.collectionVariables.set('message_id', 'msg-location-' + Date.now());"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"messageId\": \"{{message_id}}\",\n  \"to\": \"{{recipient}}\",\n  \"type\": \"location\",\n  \"location\": {\n    \"latitude\": -23.550520,\n    \"longitude\": -46.633308,\n    \"name\": \"São Paulo, SP - Brasil 📍\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/sessions/{{session_id}}/messages",
+          "host": ["{{base_url}}"],
+          "path": ["sessions", "{{session_id}}", "messages"]
+        }
+      }
+    },
+    {
+      "name": "7. Contact Message (vCard)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "pm.collectionVariables.set('message_id', 'msg-contact-' + Date.now());"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"messageId\": \"{{message_id}}\",\n  \"to\": \"{{recipient}}\",\n  \"type\": \"contact\",\n  \"contact\": {\n    \"displayName\": \"João da Silva\",\n    \"vcard\": \"BEGIN:VCARD\\nVERSION:3.0\\nFN:João da Silva\\nTEL;type=CELL;type=VOICE:+55 11 99999-9999\\nEMAIL:joao.silva@email.com\\nEND:VCARD\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/sessions/{{session_id}}/messages",
+          "host": ["{{base_url}}"],
+          "path": ["sessions", "{{session_id}}", "messages"]
+        }
+      }
+    },
+    {
+      "name": "8. Reaction Message",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "pm.collectionVariables.set('message_id', 'msg-reaction-' + Date.now());"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"messageId\": \"{{message_id}}\",\n  \"to\": \"{{recipient}}\",\n  \"type\": \"reaction\",\n  \"reaction\": {\n    \"messageId\": \"BAE5ABC123XYZ\",\n    \"emoji\": \"👍\"\n  },\n  \"_note\": \"Substitua 'messageId' pelo ID real de uma mensagem existente\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/sessions/{{session_id}}/messages",
+          "host": ["{{base_url}}"],
+          "path": ["sessions", "{{session_id}}", "messages"]
+        }
+      }
+    },
+    {
+      "name": "9. Template Message",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "pm.collectionVariables.set('message_id', 'msg-template-' + Date.now());"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"messageId\": \"{{message_id}}\",\n  \"to\": \"{{recipient}}\",\n  \"type\": \"template\",\n  \"template\": {\n    \"name\": \"hello_world\",\n    \"language\": \"pt_BR\",\n    \"components\": [\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Anderson\"\n          }\n        ]\n      }\n    ]\n  },\n  \"_note\": \"Template precisa estar aprovado no WhatsApp Business\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/sessions/{{session_id}}/messages",
+          "host": ["{{base_url}}"],
+          "path": ["sessions", "{{session_id}}", "messages"]
+        }
+      }
+    },
+    {
+      "name": "Idempotency Test",
+      "item": [
+        {
+          "name": "Send Same Message Twice",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// First request should return 201",
+                  "// Second identical request should return 200 (idempotent)",
+                  "if (pm.response.code === 201) {",
+                  "    console.log('✅ First send - Message created');",
+                  "} else if (pm.response.code === 200) {",
+                  "    console.log('✅ Second send - Idempotent (message already exists)');",
+                  "    pm.test('Idempotency works', function () {",
+                  "        pm.response.to.have.status(200);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messageId\": \"idempotent-test-12345\",\n  \"to\": \"{{recipient}}\",\n  \"type\": \"text\",\n  \"text\": \"Esta mensagem usa messageId fixo para testar idempotência\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/sessions/{{session_id}}/messages",
+              "host": ["{{base_url}}"],
+              "path": ["sessions", "{{session_id}}", "messages"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "List & Get Messages",
+      "item": [
+        {
+          "name": "List All Messages",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/sessions/{{session_id}}/messages",
+              "host": ["{{base_url}}"],
+              "path": ["sessions", "{{session_id}}", "messages"]
+            }
+          }
+        },
+        {
+          "name": "Filter by Status (sent)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/sessions/{{session_id}}/messages?status=sent",
+              "host": ["{{base_url}}"],
+              "path": ["sessions", "{{session_id}}", "messages"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "sent"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Message by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/sessions/{{session_id}}/messages/{{message_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["sessions", "{{session_id}}", "messages", "{{message_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "WhatsApp Events",
+      "item": [
+        {
+          "name": "Presence Events",
+          "item": [
+            {
+              "name": "Send Typing Indicator",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Typing indicator sent', function () {",
+                      "    const response = pm.response.json();",
+                      "    pm.expect(response.success).to.be.true;",
+                      "    pm.expect(response.data.type).to.equal('composing');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"jid\": \"{{recipient}}\",\n  \"type\": \"composing\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/sessions/{{session_id}}/presence",
+                  "host": ["{{base_url}}"],
+                  "path": ["sessions", "{{session_id}}", "presence"]
+                },
+                "description": "Envia status de 'digitando...' para um contato.\n\nTipos disponíveis:\n- composing: digitando\n- recording: gravando áudio\n- available: online\n- unavailable: offline"
+              }
+            },
+            {
+              "name": "Send Recording Indicator",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"jid\": \"{{recipient}}\",\n  \"type\": \"recording\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/sessions/{{session_id}}/presence",
+                  "host": ["{{base_url}}"],
+                  "path": ["sessions", "{{session_id}}", "presence"]
+                },
+                "description": "Envia status de 'gravando áudio...' para um contato."
+              }
+            },
+            {
+              "name": "Set Online Status",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"jid\": \"{{recipient}}\",\n  \"type\": \"available\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/sessions/{{session_id}}/presence",
+                  "host": ["{{base_url}}"],
+                  "path": ["sessions", "{{session_id}}", "presence"]
+                },
+                "description": "Define status como online para um contato."
+              }
+            },
+            {
+              "name": "Set Offline Status",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"jid\": \"{{recipient}}\",\n  \"type\": \"unavailable\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/sessions/{{session_id}}/presence",
+                  "host": ["{{base_url}}"],
+                  "path": ["sessions", "{{session_id}}", "presence"]
+                },
+                "description": "Define status como offline para um contato."
+              }
+            },
+            {
+              "name": "Subscribe to Presence Updates",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Subscribed successfully', function () {",
+                      "    const response = pm.response.json();",
+                      "    pm.expect(response.success).to.be.true;",
+                      "    pm.expect(response.data.subscribed).to.be.true;",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"jid\": \"{{recipient}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/sessions/{{session_id}}/presence/subscribe",
+                  "host": ["{{base_url}}"],
+                  "path": ["sessions", "{{session_id}}", "presence", "subscribe"]
+                },
+                "description": "Inscreve-se para receber atualizações de presença (typing, online, offline) de um contato.\n\n⚠️ IMPORTANTE: Deve ser chamado ANTES de receber eventos de presença via webhook."
+              }
+            }
+          ],
+          "description": "Endpoints para gerenciar presença (typing indicators, online/offline status)"
+        },
+        {
+          "name": "Query Events",
+          "item": [
+            {
+              "name": "Get All Events",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Events returned', function () {",
+                      "    const response = pm.response.json();",
+                      "    pm.expect(response.success).to.be.true;",
+                      "    pm.expect(response.data.events).to.be.an('array');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/sessions/{{session_id}}/events?limit=50&offset=0",
+                  "host": ["{{base_url}}"],
+                  "path": ["sessions", "{{session_id}}", "events"],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "50",
+                      "description": "Número de eventos (max 200)"
+                    },
+                    {
+                      "key": "offset",
+                      "value": "0",
+                      "description": "Paginação"
+                    }
+                  ]
+                },
+                "description": "Retorna todos os eventos de uma sessão com paginação."
+              }
+            },
+            {
+              "name": "Get Presence Events",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/sessions/{{session_id}}/events?type=presence&limit=20",
+                  "host": ["{{base_url}}"],
+                  "path": ["sessions", "{{session_id}}", "events"],
+                  "query": [
+                    {
+                      "key": "type",
+                      "value": "presence",
+                      "description": "Filtrar por tipo de evento"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Retorna apenas eventos de presença (typing, recording, online, offline)."
+              }
+            },
+            {
+              "name": "Get Receipt Events",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/sessions/{{session_id}}/events?type=receipt&limit=20",
+                  "host": ["{{base_url}}"],
+                  "path": ["sessions", "{{session_id}}", "events"],
+                  "query": [
+                    {
+                      "key": "type",
+                      "value": "receipt",
+                      "description": "Confirmações de leitura/entrega"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Retorna confirmações de leitura e entrega de mensagens."
+              }
+            },
+            {
+              "name": "Get Reaction Events",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/sessions/{{session_id}}/events?type=reaction&limit=20",
+                  "host": ["{{base_url}}"],
+                  "path": ["sessions", "{{session_id}}", "events"],
+                  "query": [
+                    {
+                      "key": "type",
+                      "value": "reaction"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Retorna reações (emojis) em mensagens."
+              }
+            },
+            {
+              "name": "Get Call Events",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/sessions/{{session_id}}/events?type=call&limit=20",
+                  "host": ["{{base_url}}"],
+                  "path": ["sessions", "{{session_id}}", "events"],
+                  "query": [
+                    {
+                      "key": "type",
+                      "value": "call"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Retorna eventos de chamadas de voz/vídeo."
+              }
+            },
+            {
+              "name": "Get Group Events",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/sessions/{{session_id}}/events?type=group&limit=20",
+                  "host": ["{{base_url}}"],
+                  "path": ["sessions", "{{session_id}}", "events"],
+                  "query": [
+                    {
+                      "key": "type",
+                      "value": "group"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Retorna eventos de grupos (add/remove participantes, mudanças de nome, etc)."
+              }
+            },
+            {
+              "name": "Get Events with Date Range",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/sessions/{{session_id}}/events?from=2025-01-01T00:00:00Z&to=2025-12-31T23:59:59Z&limit=100",
+                  "host": ["{{base_url}}"],
+                  "path": ["sessions", "{{session_id}}", "events"],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "2025-01-01T00:00:00Z",
+                      "description": "Data inicial (ISO 8601)"
+                    },
+                    {
+                      "key": "to",
+                      "value": "2025-12-31T23:59:59Z",
+                      "description": "Data final (ISO 8601)"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "100"
+                    }
+                  ]
+                },
+                "description": "Retorna eventos dentro de um período específico."
+              }
+            }
+          ],
+          "description": "Consultar histórico de eventos (presence, receipts, reactions, calls, groups)"
+        },
+        {
+          "name": "Call Events",
+          "item": [
+            {
+              "name": "Get All Calls",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Calls returned', function () {",
+                      "    const response = pm.response.json();",
+                      "    pm.expect(response.success).to.be.true;",
+                      "    pm.expect(response.data.calls).to.be.an('array');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/sessions/{{session_id}}/calls?limit=50",
+                  "host": ["{{base_url}}"],
+                  "path": ["sessions", "{{session_id}}", "calls"],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "50"
+                    }
+                  ]
+                },
+                "description": "Retorna histórico completo de chamadas da sessão."
+              }
+            },
+            {
+              "name": "Get Incoming Calls (Offers)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/sessions/{{session_id}}/calls?status=offer&limit=20",
+                  "host": ["{{base_url}}"],
+                  "path": ["sessions", "{{session_id}}", "calls"],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "offer",
+                      "description": "Chamadas recebidas"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Retorna apenas chamadas recebidas (offers)."
+              }
+            },
+            {
+              "name": "Get Missed Calls",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/sessions/{{session_id}}/calls?status=timeout&limit=20",
+                  "host": ["{{base_url}}"],
+                  "path": ["sessions", "{{session_id}}", "calls"],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "timeout",
+                      "description": "Chamadas perdidas"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Retorna chamadas perdidas (não atendidas)."
+              }
+            },
+            {
+              "name": "Get Video Calls Only",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/sessions/{{session_id}}/calls?is_video=true&limit=20",
+                  "host": ["{{base_url}}"],
+                  "path": ["sessions", "{{session_id}}", "calls"],
+                  "query": [
+                    {
+                      "key": "is_video",
+                      "value": "true",
+                      "description": "Apenas chamadas de vídeo"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Retorna apenas chamadas de vídeo."
+              }
+            },
+            {
+              "name": "Get Voice Calls Only",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/sessions/{{session_id}}/calls?is_video=false&limit=20",
+                  "host": ["{{base_url}}"],
+                  "path": ["sessions", "{{session_id}}", "calls"],
+                  "query": [
+                    {
+                      "key": "is_video",
+                      "value": "false",
+                      "description": "Apenas chamadas de voz"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Retorna apenas chamadas de voz."
+              }
+            },
+            {
+              "name": "Get Rejected Calls",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/sessions/{{session_id}}/calls?status=reject&limit=20",
+                  "host": ["{{base_url}}"],
+                  "path": ["sessions", "{{session_id}}", "calls"],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "reject"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Retorna chamadas rejeitadas."
+              }
+            }
+          ],
+          "description": "Consultar histórico de chamadas de voz/vídeo"
+        }
+      ],
+      "description": "Eventos nativos do WhatsApp:\n- Presence (typing, recording, online/offline)\n- Message Receipts (read/delivery confirmations)\n- Reactions (emoji reactions)\n- Calls (voice/video calls)\n- Groups (participants, metadata changes)"
+    }
+  ]
+}

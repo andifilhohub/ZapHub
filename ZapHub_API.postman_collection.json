@@ -1,0 +1,780 @@
+{
+	"info": {
+		"_postman_id": "zaphub-api-collection",
+		"name": "ZapHub API - Complete Collection",
+		"description": "Coleção completa de endpoints da API ZapHub para testes.\n\n**Base URL:** http://localhost:3001/api/v1\n\n**Fluxo de Uso:**\n1. Health Check\n2. Criar Sessão\n3. Aguardar 5 segundos\n4. Obter QR Code\n5. Verificar Status\n6. Enviar Mensagens",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Health & Status",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health"
+							]
+						},
+						"description": "Verifica se a API está online e funcionando."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Sessions",
+			"item": [
+				{
+					"name": "Criar Sessão",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Salvar session_id automaticamente",
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set('session_id', response.data.id);",
+									"    console.log('Session ID salvo:', response.data.id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"label\": \"Teste Postman - {{$timestamp}}\",\n  \"webhook_url\": \"https://webhook.site/your-unique-url\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/sessions",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sessions"
+							]
+						},
+						"description": "Cria uma nova sessão WhatsApp.\n\n**IMPORTANTE:** Após criar, aguarde 5 segundos antes de solicitar o QR code!"
+					},
+					"response": []
+				},
+				{
+					"name": "Listar Todas as Sessões",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/sessions",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sessions"
+							]
+						},
+						"description": "Lista todas as sessões criadas."
+					},
+					"response": []
+				},
+				{
+					"name": "Obter QR Code (Data URL)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/sessions/{{session_id}}/qr?format=data_url",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sessions",
+								"{{session_id}}",
+								"qr"
+							],
+							"query": [
+								{
+									"key": "format",
+									"value": "data_url",
+									"description": "Retorna QR pronto para usar em HTML: <img src=\"...\" />"
+								}
+							]
+						},
+						"description": "Obtém o QR code em formato Data URL (pronto para HTML).\n\n**Aguarde 5 segundos** após criar a sessão!"
+					},
+					"response": []
+				},
+				{
+					"name": "Obter QR Code (Base64)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/sessions/{{session_id}}/qr?format=base64",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sessions",
+								"{{session_id}}",
+								"qr"
+							],
+							"query": [
+								{
+									"key": "format",
+									"value": "base64",
+									"description": "Retorna QR em Base64"
+								}
+							]
+						},
+						"description": "Obtém o QR code em formato Base64."
+					},
+					"response": []
+				},
+				{
+					"name": "Obter QR Code (Raw)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/sessions/{{session_id}}/qr?format=raw",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sessions",
+								"{{session_id}}",
+								"qr"
+							],
+							"query": [
+								{
+									"key": "format",
+									"value": "raw",
+									"description": "Retorna QR em texto puro"
+								}
+							]
+						},
+						"description": "Obtém o QR code em formato texto puro (string raw)."
+					},
+					"response": []
+				},
+				{
+					"name": "Verificar Status da Sessão",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/sessions/{{session_id}}/status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sessions",
+								"{{session_id}}",
+								"status"
+							]
+						},
+						"description": "Verifica o status da conexão WhatsApp.\n\n**Fazer polling** a cada 3 segundos até `is_connected: true`."
+					},
+					"response": []
+				},
+				{
+					"name": "Deletar Sessão",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/sessions/{{session_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sessions",
+								"{{session_id}}"
+							]
+						},
+						"description": "Deleta uma sessão WhatsApp."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Messages",
+			"item": [
+				{
+					"name": "Enviar Mensagem de Texto",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"to\": \"5511999999999@s.whatsapp.net\",\n  \"type\": \"text\",\n  \"text\": \"Olá! Esta é uma mensagem de teste enviada via Postman. 🚀\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/sessions/{{session_id}}/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sessions",
+								"{{session_id}}",
+								"messages"
+							]
+						},
+						"description": "Envia uma mensagem de texto.\n\n**Formato do número:** código_país + DDD + número + @s.whatsapp.net\n\nExemplo BR: 5511999999999@s.whatsapp.net"
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar Imagem",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"to\": \"5511999999999@s.whatsapp.net\",\n  \"type\": \"image\",\n  \"image\": {\n    \"url\": \"https://picsum.photos/800/600\",\n    \"caption\": \"Esta é uma imagem de teste 📸\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/sessions/{{session_id}}/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sessions",
+								"{{session_id}}",
+								"messages"
+							]
+						},
+						"description": "Envia uma imagem com legenda opcional.\n\n**URL da imagem** deve ser pública e acessível."
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar Documento/PDF",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"to\": \"5511999999999@s.whatsapp.net\",\n  \"type\": \"document\",\n  \"document\": {\n    \"url\": \"https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf\",\n    \"mimetype\": \"application/pdf\",\n    \"filename\": \"documento-teste.pdf\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/sessions/{{session_id}}/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sessions",
+								"{{session_id}}",
+								"messages"
+							]
+						},
+						"description": "Envia um documento/arquivo.\n\n**Mimetypes comuns:**\n- PDF: application/pdf\n- Word: application/msword\n- Excel: application/vnd.ms-excel\n- Text: text/plain"
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar Áudio",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"to\": \"5511999999999@s.whatsapp.net\",\n  \"type\": \"audio\",\n  \"audio\": {\n    \"url\": \"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/sessions/{{session_id}}/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sessions",
+								"{{session_id}}",
+								"messages"
+							]
+						},
+						"description": "Envia um arquivo de áudio.\n\n**Formatos aceitos:** MP3, OGG, AAC"
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar Vídeo",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"to\": \"5511999999999@s.whatsapp.net\",\n  \"type\": \"video\",\n  \"video\": {\n    \"url\": \"https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4\",\n    \"caption\": \"Vídeo de teste 🎥\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/sessions/{{session_id}}/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sessions",
+								"{{session_id}}",
+								"messages"
+							]
+						},
+						"description": "Envia um vídeo com legenda opcional.\n\n**Formatos aceitos:** MP4, AVI, MOV"
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar Localização",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"to\": \"5511999999999@s.whatsapp.net\",\n  \"type\": \"location\",\n  \"location\": {\n    \"latitude\": -23.5505,\n    \"longitude\": -46.6333,\n    \"name\": \"São Paulo\",\n    \"address\": \"São Paulo, SP, Brasil\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/sessions/{{session_id}}/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sessions",
+								"{{session_id}}",
+								"messages"
+							]
+						},
+						"description": "Envia uma localização geográfica."
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar Contato",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"to\": \"5511999999999@s.whatsapp.net\",\n  \"type\": \"contact\",\n  \"contact\": {\n    \"name\": \"João Silva\",\n    \"phone\": \"+55 11 98888-7777\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/sessions/{{session_id}}/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sessions",
+								"{{session_id}}",
+								"messages"
+							]
+						},
+						"description": "Envia um cartão de contato."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Contacts",
+			"item": [
+				{
+					"name": "Obter Foto de Perfil",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/sessions/{{session_id}}/contacts/5511999999999@s.whatsapp.net/profile-picture",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sessions",
+								"{{session_id}}",
+								"contacts",
+								"5511999999999@s.whatsapp.net",
+								"profile-picture"
+							]
+						},
+						"description": "Obtém a URL da foto de perfil de um contato."
+					},
+					"response": []
+				},
+				{
+					"name": "Verificar se Número Existe",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/sessions/{{session_id}}/contacts/5511999999999/exists",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sessions",
+								"{{session_id}}",
+								"contacts",
+								"5511999999999",
+								"exists"
+							]
+						},
+						"description": "Verifica se um número está registrado no WhatsApp."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Groups",
+			"item": [
+				{
+					"name": "Listar Grupos",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/sessions/{{session_id}}/groups",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sessions",
+								"{{session_id}}",
+								"groups"
+							]
+						},
+						"description": "Lista todos os grupos que a sessão participa."
+					},
+					"response": []
+				},
+				{
+					"name": "Criar Grupo",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Grupo de Teste\",\n  \"participants\": [\n    \"5511999999999@s.whatsapp.net\",\n    \"5511888888888@s.whatsapp.net\"\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/sessions/{{session_id}}/groups",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sessions",
+								"{{session_id}}",
+								"groups"
+							]
+						},
+						"description": "Cria um novo grupo.\n\n**Mínimo:** 1 participante além do criador."
+					},
+					"response": []
+				},
+				{
+					"name": "Enviar Mensagem para Grupo",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"to\": \"123456789@g.us\",\n  \"type\": \"text\",\n  \"text\": \"Olá grupo! 👋\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/sessions/{{session_id}}/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"sessions",
+								"{{session_id}}",
+								"messages"
+							]
+						},
+						"description": "Envia mensagem para um grupo.\n\n**Formato do ID do grupo:** número@g.us"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Tests & Utilities",
+			"item": [
+				{
+					"name": "Fluxo Completo - Criar e Conectar",
+					"item": [
+						{
+							"name": "1. Criar Sessão",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"if (pm.response.code === 201) {",
+											"    const response = pm.response.json();",
+											"    pm.environment.set('test_session_id', response.data.id);",
+											"    console.log('✅ Sessão criada:', response.data.id);",
+											"    console.log('⏳ Aguarde 5 segundos antes de continuar...');",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"label\": \"Teste Completo - {{$timestamp}}\",\n  \"webhook_url\": \"https://webhook.site/unique-url\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/sessions",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"sessions"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "2. Obter QR Code (após 5s)",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"if (pm.response.code === 200) {",
+											"    console.log('✅ QR Code obtido!');",
+											"    console.log('📱 Escaneie o QR code no WhatsApp');",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/sessions/{{test_session_id}}/qr?format=data_url",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"sessions",
+										"{{test_session_id}}",
+										"qr"
+									],
+									"query": [
+										{
+											"key": "format",
+											"value": "data_url"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "3. Verificar Status",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"const response = pm.response.json();",
+											"if (response.data.is_connected) {",
+											"    console.log('✅ CONECTADO!');",
+											"    console.log('📱 Número:', response.data.phone_number);",
+											"} else {",
+											"    console.log('⏳ Ainda não conectado. Execute novamente.');",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/sessions/{{test_session_id}}/status",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"sessions",
+										"{{test_session_id}}",
+										"status"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "4. Enviar Mensagem de Teste",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"to\": \"5511999999999@s.whatsapp.net\",\n  \"type\": \"text\",\n  \"text\": \"✅ Teste completo realizado com sucesso!\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/sessions/{{test_session_id}}/messages",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"sessions",
+										"{{test_session_id}}",
+										"messages"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "5. Deletar Sessão",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"console.log('✅ Sessão deletada!');"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/sessions/{{test_session_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"sessions",
+										"{{test_session_id}}"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3001/api/v1",
+			"type": "string"
+		},
+		{
+			"key": "session_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "test_session_id",
+			"value": "",
+			"type": "string"
+		}
+	]
+}

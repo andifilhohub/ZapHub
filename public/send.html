@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Enviar WhatsApp (teste)</title>
+  <!-- favicon embutido para evitar requisição a /favicon.ico -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23348'/%3E%3Ctext x='50' y='55' font-size='50' text-anchor='middle' fill='white' font-family='Arial,Helvetica,sans-serif'%3EZ%3C/text%3E%3C/svg%3E">
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;max-width:720px;margin:32px auto;padding:16px}
+    label{display:block;margin-top:12px}
+    input,textarea,select{width:100%;padding:8px;margin-top:6px;border:1px solid #ccc;border-radius:6px}
+    button{margin-top:12px;padding:10px 14px;border-radius:6px}
+    pre{background:#f6f8fa;padding:12px;border-radius:6px;overflow:auto}
+  </style>
+</head>
+<body>
+  <h1>Enviar WhatsApp (teste)</h1>
+  <p>Formulário simples para testar a rota <code>/baileys/send-message</code>.</p>
+
+  <label>URL do servidor (sem barra final)
+    <input id="baseUrl" value="http://localhost:3001" />
+  </label>
+
+  <label>Número (ex: 5534999999999)
+    <input id="number" placeholder="5534999999999" />
+  </label>
+
+  <label>Mensagem
+    <textarea id="message" rows="4">Olá do frontend de teste!</textarea>
+  </label>
+
+  <label>Tipo de mensagem
+    <select id="type">
+      <option value="text" selected>Texto</option>
+      <option value="image">Imagem (url + caption)</option>
+      <option value="document">Documento (url)</option>
+    </select>
+  </label>
+
+  <label id="urlLabel" style="display:none">URL (para image/document)
+    <input id="url" placeholder="https://.../file.jpg" />
+  </label>
+
+  <label id="captionLabel" style="display:none">Caption / nome do arquivo
+    <input id="caption" placeholder="Legenda ou nome do arquivo" />
+  </label>
+
+  <button id="send">Enviar</button>
+
+  <h3>Resposta</h3>
+  <pre id="output">Nenhuma requisição ainda.</pre>
+
+  <script>
+    const typeEl = document.getElementById('type');
+    const urlLabel = document.getElementById('urlLabel');
+    const captionLabel = document.getElementById('captionLabel');
+
+    typeEl.addEventListener('change', () => {
+      const t = typeEl.value;
+      if (t === 'text') {
+        urlLabel.style.display = 'none';
+        captionLabel.style.display = 'none';
+      } else if (t === 'image') {
+        urlLabel.style.display = '';
+        captionLabel.style.display = '';
+      } else if (t === 'document') {
+        urlLabel.style.display = '';
+        captionLabel.style.display = '';
+      }
+    });
+
+    document.getElementById('send').addEventListener('click', async () => {
+      const base = document.getElementById('baseUrl').value.replace(/\/$/, '');
+      const number = document.getElementById('number').value.trim();
+      const message = document.getElementById('message').value;
+      const type = document.getElementById('type').value;
+      const url = document.getElementById('url').value.trim();
+      const caption = document.getElementById('caption').value.trim();
+      const out = document.getElementById('output');
+
+      if (!number) { out.textContent = 'Preencha o número.'; return; }
+      if (!message && type === 'text') { out.textContent = 'Preencha a mensagem.'; return; }
+      if ((type === 'image' || type === 'document') && !url) { out.textContent = 'Preencha a URL do arquivo.'; return; }
+
+      // Baileys geralmente espera o jid no formato <number>@s.whatsapp.net
+      const jid = number.includes('@') ? number : `${number}@s.whatsapp.net`;
+
+      const params = new URLSearchParams({ jid, type });
+
+      // rota da sua API (esta implementação do backend aceita number/message também em query)
+      params.set('number', number);
+      if (type === 'text') params.set('message', message);
+      if (type === 'image') { params.set('url', url); params.set('caption', caption || ''); }
+      if (type === 'document') { params.set('url', url); params.set('caption', caption || 'arquivo.pdf'); }
+
+      const urlCall = `${base}/baileys/send-message?${params.toString()}`;
+      out.textContent = `Enviando para: ${urlCall}\n\nAguardando resposta...`;
+
+      try {
+        const res = await fetch(urlCall, { method: 'GET' });
+        const data = await res.json().catch(() => ({ status: res.status, text: 'Resposta não-JSON' }));
+        out.textContent = JSON.stringify({ status: res.status, data }, null, 2);
+      } catch (err) {
+        out.textContent = 'Erro de rede: ' + err.message;
+      }
+    });
+  </script>
+</body>
+</html>

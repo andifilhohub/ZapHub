@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZapHub - Conectar WhatsApp para Chatwoot</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 600px;
+            width: 100%;
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .step {
+            background: #f7f9fc;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .step h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        
+        .input-group {
+            margin-bottom: 15px;
+        }
+        
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #4a5568;
+            font-weight: 500;
+            font-size: 14px;
+        }
+        
+        .input-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: 500;
+        }
+        
+        .status.hidden { display: none; }
+        .status.initializing { background: #fff3cd; color: #856404; }
+        .status.waiting { background: #cfe2ff; color: #084298; }
+        .status.connected { background: #d1e7dd; color: #0f5132; }
+        .status.error { background: #f8d7da; color: #842029; }
+        
+        #qr-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        #qr-container.hidden { display: none; }
+        
+        #qr-code {
+            max-width: 100%;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .instructions {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        .info-box {
+            background: #f0f4ff;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+        
+        .info-box h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        
+        .info-box code {
+            background: #e2e8f0;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .success-check {
+            font-size: 50px;
+            color: #25D366;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>
+                <span>📱</span>
+                ZapHub + Chatwoot
+            </h1>
+            <p>Conecte seu WhatsApp ao Chatwoot em 3 passos</p>
+        </div>
+        
+        <div class="content">
+            <!-- Passo 1: Configuração -->
+            <div class="step">
+                <h3>📋 Passo 1: Configuração</h3>
+                
+                <div class="input-group">
+                    <label for="api-url">URL da API ZapHub</label>
+                    <input 
+                        type="text" 
+                        id="api-url" 
+                        value="http://localhost:3001/api/v1"
+                        placeholder="http://localhost:3001/api/v1"
+                    />
+                </div>
+                
+                <div class="input-group">
+                    <label for="webhook-url">URL do Webhook Chatwoot</label>
+                    <input 
+                        type="text" 
+                        id="webhook-url" 
+                        placeholder="https://seu-chatwoot.com/api/v1/webhooks/whatsapp"
+                    />
+                </div>
+                
+                <div class="input-group">
+                    <label for="session-label">Nome da Sessão</label>
+                    <input 
+                        type="text" 
+                        id="session-label" 
+                        value="Chatwoot - Atendimento"
+                        placeholder="Ex: Chatwoot - Suporte"
+                    />
+                </div>
+            </div>
+            
+            <!-- Status -->
+            <div id="status" class="status hidden"></div>
+            
+            <!-- Passo 2: QR Code -->
+            <div id="qr-container" class="hidden">
+                <div class="step">
+                    <h3>📱 Passo 2: Escaneie o QR Code</h3>
+                    <p style="text-align: center; margin-bottom: 15px; color: #666;">
+                        Abra o WhatsApp no seu celular e escaneie o código abaixo
+                    </p>
+                    <img id="qr-code" alt="QR Code" />
+                    <p style="text-align: center; margin-top: 10px; font-size: 12px; color: #999;">
+                        ⏱️ QR Code expira em 60 segundos
+                    </p>
+                </div>
+            </div>
+            
+            <!-- Informações da sessão -->
+            <div id="session-info" class="info-box hidden">
+                <h4>ℹ️ Informações da Sessão</h4>
+                <p><strong>Session ID:</strong> <code id="session-id">-</code></p>
+                <p><strong>Status:</strong> <span id="session-status">-</span></p>
+                <p><strong>Número WhatsApp:</strong> <span id="phone-number">-</span></p>
+            </div>
+            
+            <!-- Botão de ação -->
+            <button id="action-btn" onclick="createSession()">
+                🚀 Criar Sessão e Gerar QR Code
+            </button>
+            
+            <!-- Instruções -->
+            <div class="instructions">
+                <strong>💡 Como funciona:</strong>
+                <ol style="margin-top: 10px; padding-left: 20px;">
+                    <li>Clique no botão acima para criar uma sessão</li>
+                    <li>Aguarde o QR Code ser gerado (2-3 segundos)</li>
+                    <li>Abra o WhatsApp → Menu → Dispositivos Conectados → Conectar dispositivo</li>
+                    <li>Escaneie o QR Code exibido na tela</li>
+                    <li>Pronto! Seu Chatwoot está conectado ao WhatsApp</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let sessionId = null;
+        let statusCheckInterval = null;
+        
+        async function createSession() {
+            const apiUrl = document.getElementById('api-url').value.trim();
+            const webhookUrl = document.getElementById('webhook-url').value.trim();
+            const label = document.getElementById('session-label').value.trim();
+            
+            // Validações
+            if (!apiUrl) {
+                showStatus('error', '❌ URL da API é obrigatória');
+                return;
+            }
+            
+            if (!webhookUrl) {
+                showStatus('error', '❌ URL do Webhook Chatwoot é obrigatória');
+                return;
+            }
+            
+            // Desabilitar botão
+            const btn = document.getElementById('action-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Criando sessão...';
+            
+            showStatus('initializing', '⏳ Criando sessão no ZapHub...');
+            
+            try {
+                // Criar sessão
+                const response = await fetch(`${apiUrl}/sessions`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        label: label,
+                        webhook_url: webhookUrl
+                    })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Erro ao criar sessão');
+                }
+                
+                const data = await response.json();
+                sessionId = data.data.id;
+                
+                showStatus('initializing', '✅ Sessão criada! Aguardando QR Code...');
+                
+                // Mostrar info da sessão
+                document.getElementById('session-id').textContent = sessionId;
+                document.getElementById('session-status').textContent = data.data.status;
+                document.getElementById('session-info').classList.remove('hidden');
+                
+                // Aguardar 5 segundos para QR ser gerado (workers processam em background)
+                await new Promise(r => setTimeout(r, 5000));
+                
+                // Obter QR Code com retry
+                await getQRCodeWithRetry(apiUrl, 3);
+                
+                // Iniciar monitoramento
+                startStatusCheck(apiUrl);
+                
+                // Atualizar botão
+                btn.innerHTML = '🔄 Atualizar QR Code';
+                btn.disabled = false;
+                
+            } catch (error) {
+                showStatus('error', `❌ Erro: ${error.message}`);
+                btn.innerHTML = '🔄 Tentar Novamente';
+                btn.disabled = false;
+            }
+        }
+        
+        async function getQRCode(apiUrl) {
+            showStatus('waiting', '📷 Gerando QR Code...');
+            
+            try {
+                const response = await fetch(`${apiUrl}/sessions/${sessionId}/qr?format=data_url`);
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'QR Code não disponível');
+                }
+                
+                const data = await response.json();
+                
+                // Exibir QR Code
+                document.getElementById('qr-code').src = data.data.qr_code;
+                document.getElementById('qr-container').classList.remove('hidden');
+                
+                showStatus('waiting', '📱 Escaneie o QR Code com seu WhatsApp');
+                
+            } catch (error) {
+                throw error; // Re-throw para retry handler
+            }
+        }
+        
+        async function getQRCodeWithRetry(apiUrl, maxRetries = 3) {
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                    showStatus('waiting', `📷 Gerando QR Code... (Tentativa ${attempt}/${maxRetries})`);
+                    await getQRCode(apiUrl);
+                    return; // Success!
+                } catch (error) {
+                    if (attempt === maxRetries) {
+                        showStatus('error', `❌ Erro ao obter QR Code após ${maxRetries} tentativas: ${error.message}<br><br>💡 Dica: Verifique se os workers estão rodando: <code>npm run worker</code>`);
+                        return;
+                    }
+                    // Esperar antes de tentar novamente (exponencial backoff)
+                    await new Promise(r => setTimeout(r, 2000 * attempt));
+                }
+            }
+        }
+        
+        function startStatusCheck(apiUrl) {
+            // Limpar intervalo anterior se existir
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+            }
+            
+            // Verificar status a cada 3 segundos
+            statusCheckInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`${apiUrl}/sessions/${sessionId}/status`);
+                    const data = await response.json();
+                    
+                    const status = data.data.status;
+                    document.getElementById('session-status').textContent = status;
+                    
+                    if (status === 'connected') {
+                        // Conectado!
+                        clearInterval(statusCheckInterval);
+                        
+                        const phoneNumber = data.data.phone_number || 'N/A';
+                        document.getElementById('phone-number').textContent = phoneNumber;
+                        
+                        // Esconder QR Code
+                        document.getElementById('qr-container').classList.add('hidden');
+                        
+                        // Mostrar sucesso
+                        showStatus('connected', `
+                            <div class="success-check">✅</div>
+                            <div><strong>WhatsApp Conectado com Sucesso!</strong></div>
+                            <div style="margin-top: 10px; font-size: 14px;">
+                                Número: ${phoneNumber}<br>
+                                Sua sessão está pronta para uso no Chatwoot
+                            </div>
+                        `);
+                        
+                        // Atualizar botão
+                        const btn = document.getElementById('action-btn');
+                        btn.innerHTML = '🎉 Conectado! Criar Nova Sessão?';
+                        btn.onclick = () => location.reload();
+                        
+                    } else if (status === 'initializing') {
+                        showStatus('waiting', '⏳ Aguardando leitura do QR Code...');
+                    } else if (status === 'failed') {
+                        clearInterval(statusCheckInterval);
+                        showStatus('error', '❌ Falha na conexão. Tente criar uma nova sessão.');
+                    }
+                    
+                } catch (error) {
+                    console.error('Erro ao verificar status:', error);
+                }
+            }, 3000);
+        }
+        
+        function showStatus(type, message) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = `status ${type}`;
+            statusDiv.innerHTML = message;
+            statusDiv.classList.remove('hidden');
+        }
+        
+        // Verificar saúde da API ao carregar
+        window.addEventListener('DOMContentLoaded', async () => {
+            const apiUrl = document.getElementById('api-url').value;
+            
+            try {
+                const response = await fetch(`${apiUrl.replace('/api/v1', '')}/api/v1/health`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('✅ API ZapHub está online:', data);
+                } else {
+                    showStatus('error', '⚠️ API ZapHub não está respondendo. Verifique se o servidor está rodando.');
+                }
+            } catch (error) {
+                showStatus('error', '⚠️ Não foi possível conectar à API ZapHub. Verifique a URL e se o servidor está rodando.');
+            }
+        });
+    </script>
+</body>
+</html>
