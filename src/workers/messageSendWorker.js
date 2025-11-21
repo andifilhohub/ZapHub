@@ -117,8 +117,21 @@ async function processSendMessage(job) {
     await job.updateProgress(70);
     logger.debug({ messageDbId, jid }, '[MessageSendWorker] Sending via Baileys...');
 
+    // Extract statusJidList from payload if present (for status@broadcast)
+    const messageOptions = {};
+    if (preparedPayload.statusJidList) {
+      messageOptions.statusJidList = preparedPayload.statusJidList;
+      // Remove from payload since it should be in options
+      delete preparedPayload.statusJidList;
+      
+      logger.debug(
+        { messageDbId, jid, statusJidList: messageOptions.statusJidList },
+        '[MessageSendWorker] Extracted statusJidList for status broadcast'
+      );
+    }
+
     // Send message via ConnectionManager
-    const result = await connectionManager.sendMessage(sessionId, jid, preparedPayload);
+    const result = await connectionManager.sendMessage(sessionId, jid, preparedPayload, messageOptions);
 
     const waMessageId = result.key.id;
     // Convert Long object to number if needed

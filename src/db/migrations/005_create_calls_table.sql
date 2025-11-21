@@ -25,16 +25,16 @@ CREATE TABLE IF NOT EXISTS calls (
 );
 
 -- Indexes for performance
-CREATE INDEX idx_calls_session_id ON calls(session_id);
-CREATE INDEX idx_calls_chat_id ON calls(chat_id);
-CREATE INDEX idx_calls_from_jid ON calls(from_jid);
-CREATE INDEX idx_calls_status ON calls(status);
-CREATE INDEX idx_calls_timestamp ON calls(timestamp DESC);
-CREATE INDEX idx_calls_created_at ON calls(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_calls_session_id ON calls(session_id);
+CREATE INDEX IF NOT EXISTS idx_calls_chat_id ON calls(chat_id);
+CREATE INDEX IF NOT EXISTS idx_calls_from_jid ON calls(from_jid);
+CREATE INDEX IF NOT EXISTS idx_calls_status ON calls(status);
+CREATE INDEX IF NOT EXISTS idx_calls_timestamp ON calls(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_calls_created_at ON calls(created_at DESC);
 
 -- Composite indexes for common queries
-CREATE INDEX idx_calls_session_timestamp ON calls(session_id, timestamp DESC);
-CREATE INDEX idx_calls_session_chat ON calls(session_id, chat_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_calls_session_timestamp ON calls(session_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_calls_session_chat ON calls(session_id, chat_id, timestamp DESC);
 
 -- Comments
 COMMENT ON TABLE calls IS 'Call events tracking for WhatsApp voice and video calls';

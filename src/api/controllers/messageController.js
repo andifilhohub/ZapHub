@@ -274,9 +274,24 @@ function buildMessagePayload(type, data) {
       };
 
     case 'document':
+      // If fileName is not provided by the client, derive a sensible fallback from the URL
+      let derivedFileName = undefined;
+      try {
+        if (data.document && data.document.fileName) {
+          derivedFileName = data.document.fileName;
+        } else if (data.document && data.document.url) {
+          const parts = data.document.url.split('/');
+          const last = parts[parts.length - 1] || '';
+          // strip query params
+          derivedFileName = last.split('?')[0] || `document-${Date.now()}`;
+        }
+      } catch (e) {
+        derivedFileName = `document-${Date.now()}`;
+      }
+
       return {
         document: { url: data.document.url },
-        fileName: data.document.fileName,
+        fileName: derivedFileName,
         caption: data.document.caption || undefined,
         mimetype: data.document.mimeType || 'application/octet-stream',
       };

@@ -2,6 +2,7 @@ import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
   useMultiFileAuthState,
+  WAMessageStubType,
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import path from 'path';
@@ -12,6 +13,11 @@ import config from '../../config/index.js';
 import logger from '../lib/logger.js';
 import { getSessionById, updateSession } from '../db/repositories/sessions.js';
 import { createEvent } from '../db/repositories/events.js';
+import { getMessageByWhatsAppId, updateMessageContent } from '../db/repositories/messages.js';
+import { upsertContacts } from '../db/repositories/contacts.js';
+import { upsertChats, deleteChats } from '../db/repositories/chats.js';
+import { upsertGroups, applyParticipantAction } from '../db/repositories/groups.js';
+import { upsertLabels, associateLabelWithChat, removeLabelFromChat } from '../db/repositories/labels.js';
 import { enqueueReceiveMessage } from '../lib/queues/messageQueue.js';
 import { enqueueWebhookForEvent } from '../lib/queues/webhookQueue.js';
 import { 
@@ -284,6 +290,153 @@ class ConnectionManager {
     socket.ev.on('groups.update', async (groupUpdates) => {
       await this.handleGroupsUpdate(sessionId, groupUpdates);
     });
+
+    socket.ev.on('groups.upsert', async (groups) => {
+      await this.handleGroupsUpsert(sessionId, groups);
+    });
+
+    socket.ev.on('contacts.upsert', async (contacts) => {
+      await this.handleContactsUpsert(sessionId, contacts, 'contact.upsert');
+    });
+
+    socket.ev.on('contacts.update', async (contacts) => {
+      await this.handleContactsUpsert(sessionId, contacts, 'contact.update');
+    });
+
+    socket.ev.on('chats.upsert', async (chats) => {
+      await this.handleChatsUpsert(sessionId, chats, 'chat.upsert');
+    });
+
+    socket.ev.on('chats.update', async (chats) => {
+      await this.handleChatsUpsert(sessionId, chats, 'chat.update');
+    });
+
+    socket.ev.on('chats.delete', async (chatIds) => {
+      await this.handleChatsDelete(sessionId, chatIds);
+    });
+
+    socket.ev.on('labels.edit', async (label) => {
+      await this.handleLabelEdit(sessionId, label);
+    });
+
+    socket.ev.on('labels.association', async (payload) => {
+      await this.handleLabelAssociation(sessionId, payload);
+    });
+  }
+
+  /**
+   * Handle chat upserts/updates from Baileys
+   */
+  async handleChatsUpsert(sessionId, chats, eventType = 'chat.upsert') {
+    try {
+      if (!chats?.length) {
+        return;
+      }
+
+      await upsertChats(sessionId, chats);
+
+      const simplified = chats.map((chat) => ({
+        jid: chat.id,
+        name: chat.name || chat.subject || null,
+        unreadCount: chat.unreadCount,
+        muteEndTime: chat.muteEndTime || chat.mute,
+        archived: Boolean(chat.archive || chat.archived),
+        pinned: Boolean(chat.pin || chat.pinned),
+        isMuted: Boolean(chat.isMuted),
+        lastMessageTimestamp: chat.lastMessageRecvTimestamp || chat.conversationTimestamp || chat.t,
+      }));
+
+      const payload = {
+        count: simplified.length,
+        chats: simplified,
+      };
+
+      await createEvent({
+        sessionId,
+        eventType,
+        eventCategory: 'chat',
+        payload,
+        severity: 'info',
+      });
+
+      const session = await getSessionById(sessionId);
+      if (session?.webhook_url) {
+        await enqueueWebhookForEvent(sessionId, session.webhook_url, eventType, payload);
+      }
+    } catch (err) {
+      logger.error(
+        { sessionId, error: err.message },
+        '[ConnectionManager] Error handling chats upsert/update'
+      );
+    }
+  }
+
+  async handleChatsDelete(sessionId, chatIds) {
+    try {
+      if (!chatIds?.length) return;
+
+      await deleteChats(sessionId, chatIds);
+
+      const payload = {
+        chats: chatIds,
+        timestamp: new Date().toISOString(),
+      };
+
+      await createEvent({
+        sessionId,
+        eventType: 'chat.delete',
+        eventCategory: 'chat',
+        payload,
+        severity: 'info',
+      });
+
+      const session = await getSessionById(sessionId);
+      if (session?.webhook_url) {
+        await enqueueWebhookForEvent(sessionId, session.webhook_url, 'chat.delete', payload);
+      }
+    } catch (err) {
+      logger.error({ sessionId, error: err.message }, '[ConnectionManager] Error deleting chats');
+    }
+  }
+
+  async handleContactsUpsert(sessionId, contacts, eventType = 'contact.upsert') {
+    try {
+      if (!contacts?.length) return;
+
+      await upsertContacts(sessionId, contacts);
+
+      const simplified = contacts.map((contact) => ({
+        jid: contact.jid || contact.id,
+        lid: contact.lid || null,
+        name: contact.name || null,
+        pushName: contact.notify || contact.pushName || null,
+        imgUrl: contact.imgUrl ?? contact.profileImageUrl ?? null,
+        status: contact.status || null,
+      }));
+
+      const payload = {
+        count: simplified.length,
+        contacts: simplified,
+      };
+
+      await createEvent({
+        sessionId,
+        eventType,
+        eventCategory: 'contact',
+        payload,
+        severity: 'info',
+      });
+
+      const session = await getSessionById(sessionId);
+      if (session?.webhook_url) {
+        await enqueueWebhookForEvent(sessionId, session.webhook_url, eventType, payload);
+      }
+    } catch (err) {
+      logger.error(
+        { sessionId, error: err.message },
+        '[ConnectionManager] Error handling contacts update'
+      );
+    }
   }
 
   /**
@@ -617,6 +770,7 @@ class ConnectionManager {
           chatName: chatInfo?.name || null,
           chatImageUrl: chatInfo?.imageUrl || null,
           isGroup,
+          rawMessage: message,
         });
       } catch (err) {
         logger.error(
@@ -631,24 +785,181 @@ class ConnectionManager {
    * Handle message status updates
    */
   async handleMessagesUpdate(sessionId, updates) {
+    if (!updates?.length) {
+      return;
+    }
+
+    const session = await getSessionById(sessionId);
+    const socket = this.sockets.get(sessionId);
+    const ownJid = socket?.user?.id || null;
+
     for (const update of updates) {
+      if (!update) {
+        continue;
+      }
+
+      const { key, update: updateData } = update;
+      if (!key?.id) {
+        continue;
+      }
+
       try {
-        const { key, update: status } = update;
-
-        logger.debug(
-          { sessionId, messageId: key.id, status },
-          '[ConnectionManager] Message status update'
-        );
-
-        // TODO: Update message status in database
-        // This will be implemented when we have message status tracking
+        if (updateData?.message?.editedMessage?.message) {
+          await this.processMessageEditUpdate(sessionId, session, ownJid, key, updateData);
+        } else if (updateData?.messageStubType === WAMessageStubType.REVOKE) {
+          await this.processMessageDeleteUpdate(sessionId, session, ownJid, key, updateData);
+        } else {
+          logger.debug(
+            { sessionId, key, update: updateData },
+            '[ConnectionManager] Unhandled message update'
+          );
+        }
       } catch (err) {
         logger.error(
-          { sessionId, error: err.message },
+          { sessionId, error: err.message, stack: err.stack, key, update: updateData },
           '[ConnectionManager] Error handling message update'
         );
       }
     }
+  }
+
+  async processMessageEditUpdate(sessionId, session, ownJid, key, updateData) {
+    const messageRecord = await getMessageByWhatsAppId(sessionId, key.id);
+    if (!messageRecord) {
+      logger.warn(
+        { sessionId, waMessageId: key.id },
+        '[ConnectionManager] Edited message not found in database'
+      );
+      return;
+    }
+
+    const editedPayload = updateData?.message?.editedMessage?.message;
+    if (!editedPayload) {
+      return;
+    }
+
+    const previousPayload = messageRecord.payload;
+    const content = this.extractMessageContent({ message: editedPayload });
+    const editedAt = this.normalizeUpdateTimestamp(updateData?.messageTimestamp);
+    const actor = this.resolveUpdateActor(key, ownJid);
+    const newPayload = content.payload !== undefined ? content.payload : previousPayload;
+
+    await updateMessageContent(messageRecord.id, {
+      payload: newPayload,
+      metadataPatch: {
+        editedAt,
+        editedBy: actor,
+      },
+    });
+
+    const eventPayload = {
+      messageId: messageRecord.message_id,
+      waMessageId: key.id,
+      remoteJid: key.remoteJid,
+      participant: key.participant || null,
+      fromMe: Boolean(key.fromMe),
+      type: content.type,
+      content: newPayload,
+      previousContent: previousPayload,
+      editedAt,
+      editedBy: actor,
+      timestamp: editedAt,
+    };
+
+    await createEvent({
+      sessionId,
+      eventType: 'message.edited',
+      eventCategory: 'message',
+      payload: eventPayload,
+      severity: 'info',
+    });
+
+    if (session?.webhook_url) {
+      await enqueueWebhookForEvent(sessionId, session.webhook_url, 'message.edited', eventPayload);
+    }
+
+    logger.info(
+      { sessionId, messageId: messageRecord.message_id, waMessageId: key.id },
+      '[ConnectionManager] Message edited event emitted'
+    );
+  }
+
+  async processMessageDeleteUpdate(sessionId, session, ownJid, key, updateData) {
+    const messageRecord = await getMessageByWhatsAppId(sessionId, key.id);
+    if (!messageRecord) {
+      logger.warn(
+        { sessionId, waMessageId: key.id },
+        '[ConnectionManager] Deleted message not found in database'
+      );
+      return;
+    }
+
+    const deletedAt = this.normalizeUpdateTimestamp(updateData?.messageTimestamp);
+    const actor = this.resolveUpdateActor(key, ownJid);
+
+    await updateMessageContent(messageRecord.id, {
+      metadataPatch: {
+        deleted: true,
+        deletedAt,
+        deletedBy: actor,
+      },
+    });
+
+    const eventPayload = {
+      messageId: messageRecord.message_id,
+      waMessageId: key.id,
+      remoteJid: key.remoteJid,
+      participant: key.participant || null,
+      fromMe: Boolean(key.fromMe),
+      type: messageRecord.type,
+      content: messageRecord.payload,
+      deletedAt,
+      deletedBy: actor,
+      timestamp: deletedAt,
+    };
+
+    await createEvent({
+      sessionId,
+      eventType: 'message.deleted',
+      eventCategory: 'message',
+      payload: eventPayload,
+      severity: 'info',
+    });
+
+    if (session?.webhook_url) {
+      await enqueueWebhookForEvent(sessionId, session.webhook_url, 'message.deleted', eventPayload);
+    }
+
+    logger.info(
+      { sessionId, messageId: messageRecord.message_id, waMessageId: key.id },
+      '[ConnectionManager] Message deleted event emitted'
+    );
+  }
+
+  resolveUpdateActor(key, ownJid) {
+    if (!key) {
+      return null;
+    }
+
+    if (key.fromMe) {
+      return ownJid || null;
+    }
+
+    return key.participant || key.remoteJid || null;
+  }
+
+  normalizeUpdateTimestamp(value) {
+    if (!value) {
+      return new Date().toISOString();
+    }
+
+    const numeric = Number(value);
+    if (Number.isNaN(numeric)) {
+      return new Date().toISOString();
+    }
+
+    const ms = numeric >= 1e12 ? numeric : numeric * 1000;
+    return new Date(ms).toISOString();
   }
 
   /**
@@ -831,10 +1142,91 @@ class ConnectionManager {
           }
         );
       }
+
+      await applyParticipantAction(sessionId, id, participants, action);
     } catch (err) {
       logger.error(
         { sessionId, error: err.message },
         '[ConnectionManager] Error handling group participants update'
+      );
+    }
+  }
+
+  async handleLabelEdit(sessionId, label) {
+    try {
+      if (!label) return;
+
+      await upsertLabels(sessionId, [label]);
+
+      const payload = {
+        label,
+        timestamp: new Date().toISOString(),
+      };
+
+      await createEvent({
+        sessionId,
+        eventType: 'label.edit',
+        eventCategory: 'label',
+        payload,
+        severity: 'info',
+      });
+
+      const session = await getSessionById(sessionId);
+      if (session?.webhook_url) {
+        await enqueueWebhookForEvent(sessionId, session.webhook_url, 'label.edit', payload);
+      }
+    } catch (err) {
+      logger.error({ sessionId, error: err.message }, '[ConnectionManager] Error handling label edit');
+    }
+  }
+
+  async handleLabelAssociation(sessionId, payload) {
+    try {
+      if (!payload?.association) return;
+
+      const { association, type } = payload;
+
+      if (association.type !== 'label_jid') {
+        logger.debug(
+          { sessionId, association },
+          '[ConnectionManager] Skipping non-chat label association'
+        );
+        return;
+      }
+
+      if (type === 'add') {
+        await associateLabelWithChat(sessionId, association.chatId, { id: association.labelId });
+      } else {
+        await removeLabelFromChat(sessionId, association.chatId, association.labelId);
+      }
+
+      const eventPayload = {
+        type,
+        association,
+        timestamp: new Date().toISOString(),
+      };
+
+      await createEvent({
+        sessionId,
+        eventType: 'label.association',
+        eventCategory: 'label',
+        payload: eventPayload,
+        severity: 'info',
+      });
+
+      const session = await getSessionById(sessionId);
+      if (session?.webhook_url) {
+        await enqueueWebhookForEvent(
+          sessionId,
+          session.webhook_url,
+          'label.association',
+          eventPayload
+        );
+      }
+    } catch (err) {
+      logger.error(
+        { sessionId, error: err.message },
+        '[ConnectionManager] Error handling label association'
       );
     }
   }
@@ -946,6 +1338,8 @@ class ConnectionManager {
       );
 
       for (const update of groupUpdates) {
+        await upsertGroups(sessionId, [update]);
+
         await createEvent({
           sessionId,
           eventType: 'group.update',
@@ -974,6 +1368,44 @@ class ConnectionManager {
       logger.error(
         { sessionId, error: err.message },
         '[ConnectionManager] Error handling groups update'
+      );
+    }
+  }
+
+  async handleGroupsUpsert(sessionId, groups) {
+    try {
+      if (!groups?.length) return;
+
+      await upsertGroups(sessionId, groups);
+
+      const payload = {
+        count: groups.length,
+        groups: groups.map((group) => ({
+          jid: group.id,
+          subject: group.subject,
+          owner: group.owner || group.subjectOwner || null,
+          size: group.size || group.participants?.length || null,
+          announce: group.announce,
+          restrict: group.restrict,
+        })),
+      };
+
+      await createEvent({
+        sessionId,
+        eventType: 'group.upsert',
+        eventCategory: 'group',
+        payload,
+        severity: 'info',
+      });
+
+      const session = await getSessionById(sessionId);
+      if (session?.webhook_url) {
+        await enqueueWebhookForEvent(sessionId, session.webhook_url, 'group.upsert', payload);
+      }
+    } catch (err) {
+      logger.error(
+        { sessionId, error: err.message },
+        '[ConnectionManager] Error handling group upsert'
       );
     }
   }
@@ -1427,27 +1859,74 @@ class ConnectionManager {
     try {
       logger.info({ sessionId, jid, options }, '[ConnectionManager] Sending message...');
 
-      // If sending to status@broadcast, need to add statusJidList to content
+      // If sending to status@broadcast, statusJidList must be in OPTIONS, not content
       let messageContent = { ...content };
       let messageOptions = { ...options };
       
       if (jid === 'status@broadcast') {
-        // For status, we need to provide statusJidList IN THE CONTENT
-        // Get the session's own number and add to list
-        const ownJid = socket.user?.id;
+        // statusJidList can come from content OR options (worker puts it in options)
+        let statusJidList = content.statusJidList || options.statusJidList;
         
-        if (!messageContent.statusJidList) {
-          // Add own number to statusJidList so we can see our own status
-          messageContent.statusJidList = ownJid ? [ownJid] : [];
-        }
-        // If statusJidList is provided but doesn't include ownJid, add it
-        else if (ownJid && !messageContent.statusJidList.includes(ownJid)) {
-          messageContent.statusJidList.push(ownJid);
+        // Remove from content if present (it shouldn't be there)
+        if (messageContent.statusJidList) {
+          delete messageContent.statusJidList;
         }
         
+        // CRITICAL DISCOVERY: Baileys requires statusJidList to be set!
+        // If statusJidList is undefined, Baileys sends to NOBODY (empty participantsList)
+        // 
+        // Solution:
+        // - If statusJidList is provided (array with JIDs) = PRIVATE status (only those contacts see)
+        // - If statusJidList is NOT provided (undefined) = PUBLIC status (need to set to own number)
+        //   The own number makes sure YOU see your status, and WhatsApp syncs it to all contacts automatically
+        
+        if (statusJidList && Array.isArray(statusJidList) && statusJidList.length > 0) {
+          // PRIVATE status - use provided list
+          messageOptions.statusJidList = statusJidList;
+          
+          logger.info(
+            { sessionId, statusJidListLength: statusJidList.length, statusJidList },
+            '[ConnectionManager] Sending PRIVATE status to specific contacts'
+          );
+        } else {
+          // PUBLIC status - MUST include at least own number for Baileys to send!
+          // Get own JID from socket
+          const ownJid = socket.user?.id;
+          
+          if (ownJid) {
+            // Set statusJidList to [own_number] so we can see our own status
+            // WhatsApp will automatically sync to all contacts (that's how status works)
+            messageOptions.statusJidList = [ownJid];
+            
+            logger.info(
+              { sessionId, ownJid },
+              '[ConnectionManager] Sending PUBLIC status (will be synced to all contacts by WhatsApp)'
+            );
+          } else {
+            logger.warn(
+              { sessionId },
+              '[ConnectionManager] Cannot send PUBLIC status - no user JID available'
+            );
+            throw new Error('Cannot send status: session user not available');
+          }
+        }
+      }
+
+      logger.info(
+        { sessionId, jid, messageContentKeys: Object.keys(messageContent), messageOptionsKeys: Object.keys(messageOptions) },
+        '[ConnectionManager] About to call socket.sendMessage()'
+      );
+
+      // Log exact payload being sent to Baileys for status
+      if (jid === 'status@broadcast') {
         logger.info(
-          { sessionId, ownJid, statusJidListLength: messageContent.statusJidList.length, statusJidList: messageContent.statusJidList },
-          '[ConnectionManager] Sending status/story with statusJidList in content...'
+          {
+            sessionId,
+            messageContent: JSON.stringify(messageContent),
+            messageOptions: JSON.stringify(messageOptions),
+            statusJidList: messageOptions.statusJidList
+          },
+          '[ConnectionManager] EXACT STATUS PAYLOAD being sent to Baileys'
         );
       }
 

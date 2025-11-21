@@ -390,6 +390,134 @@ curl -X PATCH "http://localhost:3000/api/v1/sessions/$SESSION_ID" \
 
 ---
 
+## 📥 Passo 4.5: Enviar Eventos do Chatwoot para o ZapHub
+
+O Chatwoot pode enviar eventos (como mensagens editadas ou deletadas) para o ZapHub através de um endpoint dedicado.
+
+### Endpoint para Receber Eventos
+
+```
+POST https://<zaphub-url>/api/v1/sessions/:session_id/events
+```
+
+**Headers necessários:**
+```
+Content-Type: application/json
+X-API-Key: sua-api-key (se autenticação estiver habilitada)
+```
+
+### Eventos Suportados
+
+#### 1. Mensagem Editada (`message.edited`)
+
+```json
+{
+  "event": "message.edited",
+  "data": {
+    "messageId": "uuid-ou-idempotency-key",
+    "waMessageId": "wamid.HBgM...",
+    "content": {
+      "text": "Texto atualizado"
+    },
+    "previousContent": {
+      "text": "Texto original"
+    },
+    "editedAt": "2025-01-16T12:00:00.000Z",
+    "editedBy": "5511999999999@s.whatsapp.net"
+  },
+  "timestamp": "2025-01-16T12:00:00.000Z"
+}
+```
+
+#### 2. Mensagem Deletada (`message.deleted`)
+
+```json
+{
+  "event": "message.deleted",
+  "data": {
+    "messageId": "uuid-ou-idempotency-key",
+    "waMessageId": "wamid.HBgM...",
+    "deletedAt": "2025-01-16T12:00:00.000Z",
+    "deletedBy": "5511999999999@s.whatsapp.net"
+  },
+  "timestamp": "2025-01-16T12:00:00.000Z"
+}
+```
+
+#### 3. Status de Mensagem (`message.delivered` ou `message.read`)
+
+```json
+{
+  "event": "message.delivered",
+  "data": {
+    "messageId": "uuid-ou-idempotency-key",
+    "waMessageId": "wamid.HBgM...",
+    "status": "delivered",
+    "timestamp": "2025-01-16T12:00:00.000Z"
+  },
+  "timestamp": "2025-01-16T12:00:00.000Z"
+}
+```
+
+### Exemplo de Requisição (cURL)
+
+```bash
+SESSION_ID="6137713e-97d9-4045-8b6f-857378719571"
+ZAPHUB_URL="http://localhost:3000/api/v1"
+
+curl -X POST "$ZAPHUB_URL/sessions/$SESSION_ID/events" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: sua-api-key" \
+  -d '{
+    "event": "message.edited",
+    "data": {
+      "messageId": "msg-12345",
+      "content": {
+        "text": "Mensagem atualizada pelo Chatwoot"
+      },
+      "previousContent": {
+        "text": "Mensagem original"
+      },
+      "editedAt": "2025-01-16T12:00:00.000Z"
+    },
+    "timestamp": "2025-01-16T12:00:00.000Z"
+  }'
+```
+
+### Resposta de Sucesso
+
+```json
+{
+  "success": true,
+  "data": {
+    "event": "message.edited",
+    "messageId": "uuid-interno",
+    "messageIdInternal": "msg-12345",
+    "waMessageId": "wamid.HBgM...",
+    "processed": true,
+    "timestamp": "2025-01-16T12:00:00.000Z"
+  },
+  "message": "Event message.edited processed successfully"
+}
+```
+
+### Identificação de Mensagens
+
+O endpoint aceita mensagens identificadas por:
+- **`messageId`**: UUID interno do ZapHub ou chave de idempotência usada ao enviar a mensagem
+- **`waMessageId`**: ID do WhatsApp (wamid.HBgM...)
+
+Pelo menos um dos dois deve ser fornecido.
+
+### Notas Importantes
+
+1. **Idempotência**: O endpoint é idempotente. Enviar o mesmo evento múltiplas vezes não causará duplicação.
+2. **Validação**: O ZapHub valida que a mensagem existe antes de processar o evento.
+3. **Sincronização**: Eventos enviados pelo Chatwoot são registrados na tabela `events` com o prefixo `external.` (ex: `external.message.edited`).
+4. **Atualização de Banco**: Mensagens editadas/deletadas são atualizadas no banco de dados do ZapHub.
+
+---
+
 ## 📤 Passo 5: Enviar Mensagens pelo Chatwoot
 
 ### 5.1 Endpoint de Envio
@@ -589,6 +717,28 @@ curl http://localhost:3000/api/v1/sessions/$SESSION_ID/status | jq '.data.last_s
 
 # Recriar sessão se necessário
 ```
+
+### ❌ Problema: Chatwoot não consegue descriptografar mídia / `raw_media`
+
+Quando o worker de recebimento não consegue persistir o anexo (por exemplo, porque a sessão não estava totalmente pronta), o webhook para o Chatwoot envia o campo `raw_media` contendo o `url` da mídia cifrada, o `mediaKey` e os hashes (`fileEncSha256`, `fileSha256`) que o ZapHub recebeu diretamente do WhatsApp. Para que o Chatwoot consiga descriptografar corretamente com `decrypt_whatsapp_media`, é imperativo que o blob retornado por esse `url` esteja **idêntico** ao que o WhatsApp enviou:
+
+1. Faça o download com `Accept-Encoding: identity` e **sem** middlewares/proxies que descompactem ou mexam no corpo (por exemplo, em Ruby):
+   ```ruby
+   uri = URI(raw_media['url'])
+   Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https') do |http|
+     request = Net::HTTP::Get.new(uri.request_uri)
+     request['Accept-Encoding'] = 'identity'
+     response = http.request(request)
+     puts "content-length: #{response['content-length']}, body.bytesize: #{response.body.bytesize}"
+     raise "invalid payload length" unless response.body.bytesize == raw_media['fileLength']
+     decrypt_whatsapp_media(response.body, raw_media['mediaKey'])
+   end
+   ```
+   Compare `response['content-length']` e `body.bytesize` com `raw_media.fileLength` do webhook; eles devem bater para garantir que você está usando os 18 380 bytes cifrados originais.
+2. Confirme que não há proxies/nginx/rewrite entre o Chatwoot e o WhatsApp, pois qualquer recompressão/regravação altera os bytes e faz o AES-256-CBC falhar com “wrong final block length”.
+3. Passe o `mediaKey` **exatamente** como veio no webhook (`raw_media.mediaKey`) para a função `decrypt_whatsapp_media`; o HKDF/AES usado pelo Chatwoot já está correto assim que o input for legítimo.
+
+Depois que o payload cifrado for baixado sem alterações, o padding do AES bate e o Chatwoot armazena a imagem perfeitamente.
 
 ---
 
@@ -794,7 +944,7 @@ chmod +x setup-chatwoot.sh
    - Configure no Nginx ou use middleware
 
 4. **Validar webhooks:**
-   - Adicione assinatura HMAC nos webhooks
+   - Adicione assinatura HMAC nos webhooks (envie `X-ZapHub-Signature` usando `WEBHOOK_SIGNATURE_SECRET`)
    - Valide origem das requisições
 
 5. **Monitoramento:**

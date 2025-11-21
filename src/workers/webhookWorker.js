@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { Worker } from 'bullmq';
 import { getRedisClient } from '../lib/redis.js';
 import QUEUE_NAMES from '../lib/queueNames.js';
@@ -19,22 +20,37 @@ async function processWebhookDelivery(job) {
   );
 
   try {
+    const webhookType = event?.split?.('.')?.[0] || 'event';
+    const webhookRequestBody = {
+      type: webhookType,
+      event,
+      sessionId,
+      payload,
+      data: payload,
+      timestamp: new Date().toISOString(),
+      deliveryId: job.id,
+    };
+
+    const webhookPayload = JSON.stringify(webhookRequestBody);
+    const headers = {
+      'Content-Type': 'application/json',
+      'User-Agent': 'ZapHub-Webhook/1.0',
+      'X-ZapHub-Event': event,
+      'X-ZapHub-Session': sessionId,
+      'X-ZapHub-Delivery': job.id,
+    };
+
+    if (config.webhook.signatureSecret) {
+      const signature = crypto
+        .createHmac('sha256', config.webhook.signatureSecret)
+        .update(webhookPayload)
+        .digest('hex');
+      headers['X-ZapHub-Signature'] = signature;
+    }
     const response = await fetch(webhookUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'ZapHub-Webhook/1.0',
-        'X-ZapHub-Event': event,
-        'X-ZapHub-Session': sessionId,
-        'X-ZapHub-Delivery': job.id,
-      },
-      body: JSON.stringify({
-        event,
-        sessionId,
-        payload,
-        timestamp: new Date().toISOString(),
-        deliveryId: job.id,
-      }),
+      headers,
+      body: webhookPayload,
       signal: AbortSignal.timeout(config.webhook.timeout),
     });
 

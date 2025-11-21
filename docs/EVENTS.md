@@ -695,6 +695,8 @@ X-ZapHub-Session-Id: 6137713e-97d9-4045-8b6f-857378719571
 | `message.receipt.delivered` | Message delivered |
 | `message.receipt.read` | Message read |
 | `message.reaction` | Message reaction added/removed |
+| `message.edited` | Message edited (conteúdo atualizado) |
+| `message.deleted` | Message deleted (após revogação) |
 | `call.offer` | Incoming call offer |
 | `call.ringing` | Call is ringing |
 | `call.accept` | Call accepted |
@@ -706,6 +708,116 @@ X-ZapHub-Session-Id: 6137713e-97d9-4045-8b6f-857378719571
 | `group.participants.promote` | Participant promoted to admin |
 | `group.participants.demote` | Admin demoted |
 | `group.update` | Group metadata updated |
+
+### Mensagens editadas e deletadas
+
+O WhatsApp entrega `messages.update` com `editedMessage` ou `protocolMessage.REVOKE` quando alguém edita ou apaga uma mensagem. O ZapHub transforma esses eventos em `message.edited` e `message.deleted` e envia o payload (campo `data`, também duplicado em `payload`) para o webhook configurado.
+
+Campos principais entregues em ambos os eventos:
+
+- `messageId`: UUID interno do ZapHub
+- `waMessageId`: ID do WhatsApp (`wamid.HBgM...`)
+- `remoteJid`: chat (pode ser `5511999999999@s.whatsapp.net` ou grupo)
+- `participant`: autor real em grupos (`null` para conversas 1:1)
+- `fromMe`: indica se a mensagem foi enviada pela sessão atual
+- `type`: tipo de mensagem (`text`, `image`, `video`, etc.)
+- `content`: payload atual (novo texto no `message.edited`, última versão visível no `message.deleted`)
+- `timestamp`: quando o evento foi registrado
+
+O evento `message.edited` ainda inclui:
+
+- `previousContent`: corpo anterior, útil para mostrar o delta no front-end
+- `editedAt` e `editedBy`: carimbos de data/autor da edição
+
+O evento `message.deleted` adiciona:
+
+- `deletedAt` e `deletedBy`: quem removeu a mensagem e quando
+
+#### Exemplo `message.edited`
+
+```json
+{
+  "type": "message",
+  "event": "message.edited",
+  "sessionId": "6137713e-97d9-4045-8b6f-857378719571",
+  "payload": {
+    "messageId": "8d6af8c3-2e3f-4a1c-b1e8-7b12c5f143de",
+    "waMessageId": "wamid.HBgM...",
+    "remoteJid": "5511999999999@s.whatsapp.net",
+    "participant": null,
+    "fromMe": true,
+    "type": "text",
+    "content": {
+      "text": "Agora com a versão corrigida"
+    },
+    "previousContent": {
+      "text": "Versão inicial com erro"
+    },
+    "editedAt": "2025-05-01T12:34:56.789Z",
+    "editedBy": "5511999999999@s.whatsapp.net",
+    "timestamp": "2025-05-01T12:34:56.789Z"
+  },
+  "data": {
+    "messageId": "8d6af8c3-2e3f-4a1c-b1e8-7b12c5f143de",
+    "waMessageId": "wamid.HBgM...",
+    "remoteJid": "5511999999999@s.whatsapp.net",
+    "participant": null,
+    "fromMe": true,
+    "type": "text",
+    "content": {
+      "text": "Agora com a versão corrigida"
+    },
+    "previousContent": {
+      "text": "Versão inicial com erro"
+    },
+    "editedAt": "2025-05-01T12:34:56.789Z",
+    "editedBy": "5511999999999@s.whatsapp.net",
+    "timestamp": "2025-05-01T12:34:56.789Z"
+  },
+  "timestamp": "2025-05-01T12:34:56.789Z",
+  "deliveryId": "webhook-6137713e-...-0"
+}
+```
+
+#### Exemplo `message.deleted`
+
+```json
+{
+  "type": "message",
+  "event": "message.deleted",
+  "sessionId": "6137713e-97d9-4045-8b6f-857378719571",
+  "payload": {
+    "messageId": "5c1bde9f-43b4-4c82-a6f9-9f1ef81a2f4a",
+    "waMessageId": "wamid.HBgN...",
+    "remoteJid": "5511999999999@s.whatsapp.net",
+    "participant": null,
+    "fromMe": false,
+    "type": "text",
+    "content": {
+      "text": "Mensagem original que foi removida"
+    },
+    "deletedAt": "2025-05-01T12:40:00.000Z",
+    "deletedBy": "5511999999999@s.whatsapp.net",
+    "timestamp": "2025-05-01T12:40:00.000Z"
+  },
+  "data": {
+    "messageId": "5c1bde9f-43b4-4c82-a6f9-9f1ef81a2f4a",
+    "waMessageId": "wamid.HBgN...",
+    "remoteJid": "5511999999999@s.whatsapp.net",
+    "participant": null,
+    "fromMe": false,
+    "type": "text",
+    "content": {
+      "text": "Mensagem original que foi removida"
+    },
+    "deletedAt": "2025-05-01T12:40:00.000Z",
+    "deletedBy": "5511999999999@s.whatsapp.net",
+    "timestamp": "2025-05-01T12:40:00.000Z"
+  },
+  "timestamp": "2025-05-01T12:40:00.000Z",
+  "deliveryId": "webhook-6137713e-...-1"
+}
+```
 
 ---
 

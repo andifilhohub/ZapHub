@@ -419,9 +419,130 @@ GET /sessions
 
 ---
 
-## 🔔 **12. Webhooks (Receber Eventos)**
+## 📥 **12. Receber Eventos de Sistemas Externos**
+
+Permite que sistemas externos (como Chatwoot) enviem eventos para o ZapHub, como mensagens editadas ou deletadas.
+
+### **Endpoint**
+```
+POST /sessions/{session_id}/events
+```
+
+### **Request Body**
+
+#### **Mensagem Editada**
+```json
+{
+  "event": "message.edited",
+  "data": {
+    "messageId": "msg-12345",
+    "waMessageId": "wamid.HBgM...",
+    "content": {
+      "text": "Texto atualizado"
+    },
+    "previousContent": {
+      "text": "Texto original"
+    },
+    "editedAt": "2025-01-16T12:00:00.000Z",
+    "editedBy": "5511999999999@s.whatsapp.net"
+  },
+  "timestamp": "2025-01-16T12:00:00.000Z"
+}
+```
+
+#### **Mensagem Deletada**
+```json
+{
+  "event": "message.deleted",
+  "data": {
+    "messageId": "msg-12345",
+    "waMessageId": "wamid.HBgM...",
+    "deletedAt": "2025-01-16T12:00:00.000Z",
+    "deletedBy": "5511999999999@s.whatsapp.net"
+  },
+  "timestamp": "2025-01-16T12:00:00.000Z"
+}
+```
+
+#### **Status de Mensagem (Delivered/Read)**
+```json
+{
+  "event": "message.delivered",
+  "data": {
+    "messageId": "msg-12345",
+    "waMessageId": "wamid.HBgM...",
+    "status": "delivered",
+    "timestamp": "2025-01-16T12:00:00.000Z"
+  },
+  "timestamp": "2025-01-16T12:00:00.000Z"
+}
+```
+
+### **Campos do Request**
+
+| Campo | Tipo | Obrigatório | Descrição |
+|-------|------|-------------|-----------|
+| `event` | string | ✅ Sim | Tipo do evento: `message.edited`, `message.deleted`, `message.delivered`, `message.read` |
+| `data.messageId` | string | ✅ Sim | UUID interno do ZapHub ou chave de idempotência |
+| `data.waMessageId` | string | ❌ Não | ID do WhatsApp (wamid.HBgM...) |
+| `data.content` | object | ❌ Não | Conteúdo atualizado (para `message.edited`) |
+| `data.previousContent` | object | ❌ Não | Conteúdo anterior (para `message.edited`) |
+| `data.editedAt` | string | ❌ Não | ISO 8601 timestamp da edição |
+| `data.editedBy` | string | ❌ Não | JID de quem editou |
+| `data.deletedAt` | string | ❌ Não | ISO 8601 timestamp da deleção |
+| `data.deletedBy` | string | ❌ Não | JID de quem deletou |
+| `data.status` | string | ❌ Não | Status da mensagem (`delivered`, `read`) |
+| `timestamp` | string | ❌ Não | ISO 8601 timestamp do evento |
+
+### **Response (200)**
+```json
+{
+  "success": true,
+  "data": {
+    "event": "message.edited",
+    "messageId": "uuid-interno",
+    "messageIdInternal": "msg-12345",
+    "waMessageId": "wamid.HBgM...",
+    "processed": true,
+    "timestamp": "2025-01-16T12:00:00.000Z"
+  },
+  "message": "Event message.edited processed successfully"
+}
+```
+
+### **Exemplo cURL**
+```bash
+curl -X POST "http://localhost:3001/api/v1/sessions/{session_id}/events" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: sua-api-key" \
+  -d '{
+    "event": "message.edited",
+    "data": {
+      "messageId": "msg-12345",
+      "content": {
+        "text": "Mensagem atualizada"
+      },
+      "previousContent": {
+        "text": "Mensagem original"
+      }
+    }
+  }'
+```
+
+### **Notas Importantes**
+
+- ⚠️ Pelo menos um dos campos `messageId` ou `waMessageId` deve ser fornecido
+- ✅ O endpoint é idempotente (pode ser chamado múltiplas vezes sem efeitos colaterais)
+- 📝 Eventos são registrados na tabela `events` com o prefixo `external.` (ex: `external.message.edited`)
+- 🔄 Mensagens são atualizadas no banco de dados do ZapHub
+
+---
+
+## 🔔 **13. Webhooks (Receber Eventos)**
 
 O ZapHub envia eventos para o `webhook_url` configurado na sessão.
+
+> 📸 **Processando Mensagens com Imagens?** Consulte o [Guia Completo de Processamento de Imagens](./WEBHOOK_IMAGE_PROCESSING.md) para exemplos detalhados em Node.js e Python.
 
 ### **Formato do Webhook**
 ```json

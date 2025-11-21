@@ -16,6 +16,7 @@ import {
   sendPresenceUpdate,
   subscribePresence,
 } from '../controllers/eventController.js';
+import { processIncomingEventController } from '../controllers/incomingEventController.js';
 import { authenticateApiKey } from '../middleware/auth.js';
 import { validateBody, validateParams, validateQuery } from '../middleware/validate.js';
 import {
@@ -25,8 +26,10 @@ import {
   listSessionsSchema,
   qrCodeQuerySchema,
 } from '../validators/sessionValidators.js';
+import { incomingEventSchema } from '../validators/eventValidators.js';
 import messageRoutes from './messages.js';
 import webhookRoutes from './webhooks.js';
+import labelRoutes from './labels.js';
 
 const router = express.Router();
 
@@ -188,6 +191,33 @@ router.post(
 );
 
 /**
+ * @route   POST /api/sessions/:id/events
+ * @desc    Receive events from external systems (e.g., Chatwoot)
+ * @access  Private (API Key required)
+ * 
+ * @example
+ * POST /api/v1/sessions/{session_id}/events
+ * {
+ *   "event": "message.edited",
+ *   "data": {
+ *     "messageId": "uuid-or-idempotency-key",
+ *     "content": { "text": "Updated text" },
+ *     "previousContent": { "text": "Original text" },
+ *     "editedAt": "2025-01-16T12:00:00.000Z",
+ *     "editedBy": "5511999999999@s.whatsapp.net"
+ *   },
+ *   "timestamp": "2025-01-16T12:00:00.000Z"
+ * }
+ */
+router.post(
+  '/:id/events',
+  authenticateApiKey,
+  validateParams(sessionIdSchema),
+  validateBody(incomingEventSchema),
+  processIncomingEventController
+);
+
+/**
  * Message routes (nested under sessions)
  * Mounts message routes at /api/sessions/:id/messages
  */
@@ -198,5 +228,12 @@ router.use('/:id/messages', messageRoutes);
  * Mounts webhook routes at /api/sessions/:id/webhook
  */
 router.use('/:id/webhook', webhookRoutes);
+
+router.use(
+  '/:id/labels',
+  authenticateApiKey,
+  validateParams(sessionIdSchema),
+  labelRoutes
+);
 
 export default router;

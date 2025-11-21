@@ -2,7 +2,7 @@ import express from 'express';
 import { authenticateApiKey } from '../middleware/auth.js';
 import { validateBody, validateParams, validateQuery } from '../middleware/validate.js';
 import {
-  sendMessageSchema,
+  sendMessageSchemaSimple,
   listMessagesSchema,
   messageIdSchema,
 } from '../validators/messageValidators.js';
@@ -32,7 +32,7 @@ router.post(
   '/',
   authenticateApiKey,
   validateParams(sessionIdSchema),
-  validateBody(sendMessageSchema),
+  validateBody(sendMessageSchemaSimple),
   sendMessageController
 );
 

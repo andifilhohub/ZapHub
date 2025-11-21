@@ -58,6 +58,34 @@ export async function getMessageByWhatsAppId(sessionId, waMessageId) {
   return result.rows[0] || null;
 }
 
+export async function updateMessageContent(id, updates = {}) {
+  const { payload, metadataPatch } = updates;
+  const pool = getDbPool();
+
+  const fields = [];
+  const params = [];
+  let paramIndex = 1;
+
+  if (payload !== undefined) {
+    fields.push(`payload = $${paramIndex++}`);
+    params.push(JSON.stringify(payload));
+  }
+
+  if (metadataPatch && Object.keys(metadataPatch).length > 0) {
+    fields.push(`metadata = COALESCE(metadata, '{}'::jsonb) || $${paramIndex++}`);
+    params.push(JSON.stringify(metadataPatch));
+  }
+
+  if (!fields.length) {
+    return getMessageById(id);
+  }
+
+  params.push(id);
+  const query = `UPDATE messages SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+  const result = await pool.query(query, params);
+  return result.rows[0] || null;
+}
+
 export async function getMessageByIdempotencyKey(sessionId, messageId) {
   const pool = getDbPool();
   const result = await pool.query(
@@ -204,6 +232,7 @@ export default {
   getMessagesBySession,
   updateMessageStatus,
   updateMessageStatusByWhatsAppId,
+  updateMessageContent,
   incrementMessageAttempts,
   getQueuedMessages,
 };

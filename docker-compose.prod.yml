@@ -1,0 +1,47 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: zaphub_prod
+      POSTGRES_USER: zaphub
+      POSTGRES_PASSWORD: changeThisStrongPassword
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+
+  api:
+    build:
+      context: .
+    image: zaphub/api:latest
+    restart: unless-stopped
+    env_file: .env.production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+      - redis
+    command: ["npm", "start"]
+
+  workers:
+    build:
+      context: .
+    image: zaphub/workers:latest
+    restart: unless-stopped
+    env_file: .env.production
+    depends_on:
+      - postgres
+      - redis
+    command: ["node", "src/workers/index.js"]
+
+volumes:
+  postgres_data:
+  redis_data:

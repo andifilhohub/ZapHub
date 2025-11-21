@@ -36,6 +36,7 @@
   "dependencies": {
     "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "^6.7.21",
+    "@aws-sdk/client-s3": "^3.676.0",
     "bullmq": "^5.34.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

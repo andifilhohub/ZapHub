@@ -188,6 +188,8 @@ Webhooks serão enviados para:
 - `message.receipt.read` - Quando mensagem é lida
 - `message.receipt.delivered` - Quando mensagem é entregue
 - `message.reaction` - Quando recebe reação
+- `message.edited` - Quando uma mensagem é editada
+- `message.deleted` - Quando uma mensagem é remota/revogada
 - `call.*` - Eventos de chamadas (offer, accept, reject, etc.)
 - `group.participants.*` - Mudanças em membros do grupo
 - `group.update` - Mudanças no grupo
@@ -201,6 +203,7 @@ Baileys Socket
     ├─ message-receipt.update ──▶ receiptQueue ──▶ receipt-event.worker
     ├─ call ──▶ callQueue ──▶ call-event.worker
     ├─ messages.reaction ──▶ events table + webhook
+    ├─ messages.update (edited/deleted) ──▶ events table + webhook
     ├─ group-participants.update ──▶ events table + webhook
     └─ groups.update ──▶ events table + webhook
                 │

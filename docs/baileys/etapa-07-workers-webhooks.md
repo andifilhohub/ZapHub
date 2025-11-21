@@ -844,6 +844,40 @@ async function processWebhookAsync(event, payload) {
 }
 ```
 
+### Mensagens com mídia criptografada (`raw_media`)
+
+Quando o worker falha em persistir o anexo localmente (por exemplo porque a sessão ainda está inicializando), o webhook é enviado com o campo `payload.raw_media`. Esse objeto contém a URL e o `mediaKey` que o WhatsApp entregou originalmente, então **é responsabilidade do Chatwoot baixar esse blob cifrado e aplicar `decrypt_whatsapp_media`** sem modificar nenhum byte.
+
+- Baixe o `raw_media.url` com `Accept-Encoding: identity` e sem middlewares que recompactem, descompactem ou reescrevam o corpo.
+- Confirme que o `content-length` retornado bate com `raw_media.fileLength`; discrepâncias indicam que algum proxy está alterando os bytes e quebrará o AES.
+- Passe o `payload.raw_media.mediaKey` **sem alterações** para o `decrypt_whatsapp_media` ou utilitário equivalente da sua stack.
+
+```javascript
+import fetch from 'node-fetch';
+
+async function fetchEncryptedMedia(rawMedia) {
+  const response = await fetch(rawMedia.url, {
+    headers: {
+      'Accept-Encoding': 'identity',
+      'User-Agent': 'ZapHub-raw-media',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Falha ao baixar raw_media: ${response.status}`);
+  }
+
+  const buffer = await response.arrayBuffer();
+  if (buffer.byteLength !== rawMedia.fileLength) {
+    throw new Error('raw_media em tamanhos diferentes; verifique proxies/compressão');
+  }
+
+  return Buffer.from(buffer); // coloque esse Buffer em decrypt_whatsapp_media(rawMedia.mediaKey)
+}
+```
+
+Se o Chatwoot continuar sem conseguir recuperar a mídia mesmo com o `mediaKey`, avalie a rota usada para baixar `raw_media.url`: qualquer proxy que reescreva o corpo ou altere headers acabará mudando o conteúdo cifrado e fará com que o AES retorne erro de padding.
+
 ---
 
 ### Mensagens recebidas não aparecem no banco

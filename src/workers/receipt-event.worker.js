@@ -20,15 +20,11 @@ const redisConnection = {
 };
 
 function getReceiptStatus({ readTimestamp }) {
-  if (readTimestamp) {
-    return 'read';
-  }
-  return 'delivered';
+  return readTimestamp ? 'read' : 'delivered';
 }
 
 function normalizeTimestamp(value) {
   if (!value) return null;
-  // Baileys envia timestamp em segundos; garantir milissegundos
   const numeric = Number(value);
   if (Number.isNaN(numeric)) {
     return null;
@@ -49,6 +45,8 @@ export function createReceiptEventWorker() {
 
       try {
         const session = await getSessionById(sessionId);
+        const eventTimestamp = timestamp ? new Date(timestamp).toISOString() : new Date().toISOString();
+        const receiptSummaries = [];
 
         for (const { key, receipt } of receipts) {
           const { userJid, receiptTimestamp, readTimestamp } = receipt;
@@ -63,17 +61,23 @@ export function createReceiptEventWorker() {
             readAt,
           });
 
-          const payload = {
-            messageId: updatedMessage?.id || null,
+          const receiptData = {
+            messageId: updatedMessage?.message_id || null,
             waMessageId: key.id,
+            status,
             remoteJid: key.remoteJid,
             participant: key.participant || null,
-            fromMe: key.fromMe,
-            userJid,
-            receiptTimestamp: deliveredAt?.toISOString() || null,
-            readTimestamp: readAt?.toISOString() || null,
-            status,
-            timestamp,
+            fromMe: Boolean(key.fromMe),
+            deliveredAt: deliveredAt?.toISOString() || null,
+            readAt: readAt?.toISOString() || null,
+          };
+
+          const payload = {
+            data: receiptData,
+            metadata: {
+              userJid,
+              timestamp: eventTimestamp,
+            },
           };
 
           await createEvent({
@@ -82,7 +86,7 @@ export function createReceiptEventWorker() {
             eventCategory: 'message',
             jid: key.remoteJid,
             participant: key.participant || null,
-            messageId: key.id,
+            messageId: updatedMessage?.message_id || key.id,
             fromMe: key.fromMe,
             payload,
             severity: 'info',
@@ -92,10 +96,32 @@ export function createReceiptEventWorker() {
             await enqueueWebhookForEvent(sessionId, session.webhook_url, eventType, payload);
           }
 
+          receiptSummaries.push({
+            messageId: receiptData.messageId,
+            waMessageId: receiptData.waMessageId,
+            status: receiptData.status,
+            remoteJid: receiptData.remoteJid,
+            timestamp: eventTimestamp,
+          });
+
           logger.debug(
-            { sessionId, messageId: key.id, status, userJid },
+            { sessionId, messageId: receiptData.messageId || receiptData.waMessageId, status, userJid },
             '[ReceiptWorker] Receipt event processed'
           );
+        }
+
+        if (session?.webhook_url && receiptSummaries.length > 0) {
+          const aggregatedPayload = {
+            data: {
+              receipts: receiptSummaries,
+            },
+            metadata: {
+              size: receiptSummaries.length,
+              timestamp: eventTimestamp,
+            },
+          };
+
+          await enqueueWebhookForEvent(sessionId, session.webhook_url, 'message.receipt.update', aggregatedPayload);
         }
 
         return { success: true, receiptCount: receipts.length };

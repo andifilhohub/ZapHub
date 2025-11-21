@@ -116,7 +116,8 @@ const documentMessageSchema = Joi.object({
       .uri({ scheme: ['http', 'https'] })
       .required()
       .description('URL of the document to send'),
-    fileName: Joi.string().max(255).required().description('File name with extension'),
+    // fileName is optional now; controller will derive a sensible fallback if not provided
+    fileName: Joi.string().max(255).optional().description('File name with extension'),
     caption: Joi.string().max(1024).optional().allow('').description('Optional caption'),
     mimeType: Joi.string()
       .optional()
@@ -230,7 +231,7 @@ export const sendMessageSchema = Joi.object({
   }).when('type', { is: 'audio', then: Joi.required() }),
   document: Joi.object({
     url: Joi.string().uri().required(),
-    fileName: Joi.string().required(),
+    fileName: Joi.string().optional(),
     mimetype: Joi.string().optional(),
   }).when('type', { is: 'document', then: Joi.required() }),
   location: Joi.object({
@@ -359,7 +360,8 @@ export const sendMessageSchemaSimple = Joi.object({
     is: 'document',
     then: Joi.object({
       url: Joi.string().uri({ scheme: ['http', 'https'] }).required(),
-      fileName: Joi.string().max(255).required(),
+      // Allow clients to omit fileName; the server will provide a fallback filename
+      fileName: Joi.string().max(255).optional(),
       caption: Joi.string().max(1024).optional().allow(''),
       mimeType: Joi.string().optional(),
     }).required(),

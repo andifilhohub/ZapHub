@@ -99,6 +99,7 @@ export async function enqueueReceiveMessage(data) {
     chatName = null,
     chatImageUrl = null,
     isGroup = false,
+    rawMessage = null,
   } = data;
 
   const queue = getOrCreateQueue(QUEUE_NAMES.MESSAGE_RECEIVE);
@@ -120,6 +121,7 @@ export async function enqueueReceiveMessage(data) {
       chatName,
       chatImageUrl,
       isGroup,
+      rawMessage,
     },
     {
       jobId: `msg-receive-${waMessageId}`, // Prevent duplicate processing

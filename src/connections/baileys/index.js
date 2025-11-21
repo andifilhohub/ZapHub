@@ -4,6 +4,7 @@ const {
   DisconnectReason,
   fetchLatestBaileysVersion,
   useMultiFileAuthState,
+  downloadMediaMessage,
 } = require('@whiskeysockets/baileys');
 const { webcrypto } = require('node:crypto');
 const path = require('node:path');
@@ -148,6 +149,175 @@ async function startWhatsApp(options = {}) {
   return socket;
 }
 
+/**
+ * Extrai informações estruturadas de uma mensagem Baileys
+ */
+function extractMessageContent(message) {
+  const msg = message.message;
+  if (!msg) {
+    return { type: 'unknown', content: null, text: '' };
+  }
+
+  // Mensagem de texto simples
+  if (msg.conversation) {
+    return {
+      type: 'text',
+      content: { text: msg.conversation },
+      text: msg.conversation,
+    };
+  }
+
+  // Mensagem de texto estendida
+  if (msg.extendedTextMessage) {
+    return {
+      type: 'text',
+      content: { text: msg.extendedTextMessage.text },
+      text: msg.extendedTextMessage.text,
+    };
+  }
+
+  // Mensagem de imagem
+  if (msg.imageMessage) {
+    const imageMsg = msg.imageMessage;
+    return {
+      type: 'image',
+      content: {
+        mimetype: imageMsg.mimetype || 'image/jpeg',
+        caption: imageMsg.caption || null,
+        url: imageMsg.url || null,
+        fileLength: imageMsg.fileLength || imageMsg.fileLengthLow || null,
+        mediaKey: imageMsg.mediaKey ? Buffer.from(imageMsg.mediaKey).toString('base64') : null,
+        fileEncSha256: imageMsg.fileEncSha256 ? Buffer.from(imageMsg.fileEncSha256).toString('base64') : null,
+        fileSha256: imageMsg.fileSha256 ? Buffer.from(imageMsg.fileSha256).toString('base64') : null,
+        directPath: imageMsg.directPath || null,
+      },
+      text: imageMsg.caption || '',
+    };
+  }
+
+  // Mensagem de vídeo
+  if (msg.videoMessage) {
+    const videoMsg = msg.videoMessage;
+    return {
+      type: 'video',
+      content: {
+        mimetype: videoMsg.mimetype || 'video/mp4',
+        caption: videoMsg.caption || null,
+        url: videoMsg.url || null,
+        fileLength: videoMsg.fileLength || videoMsg.fileLengthLow || null,
+        mediaKey: videoMsg.mediaKey ? Buffer.from(videoMsg.mediaKey).toString('base64') : null,
+        fileEncSha256: videoMsg.fileEncSha256 ? Buffer.from(videoMsg.fileEncSha256).toString('base64') : null,
+        fileSha256: videoMsg.fileSha256 ? Buffer.from(videoMsg.fileSha256).toString('base64') : null,
+        directPath: videoMsg.directPath || null,
+        seconds: videoMsg.seconds || null,
+      },
+      text: videoMsg.caption || '',
+    };
+  }
+
+  // Mensagem de áudio
+  if (msg.audioMessage) {
+    const audioMsg = msg.audioMessage;
+    return {
+      type: 'audio',
+      content: {
+        mimetype: audioMsg.mimetype || 'audio/ogg; codecs=opus',
+        url: audioMsg.url || null,
+        fileLength: audioMsg.fileLength || audioMsg.fileLengthLow || null,
+        mediaKey: audioMsg.mediaKey ? Buffer.from(audioMsg.mediaKey).toString('base64') : null,
+        fileEncSha256: audioMsg.fileEncSha256 ? Buffer.from(audioMsg.fileEncSha256).toString('base64') : null,
+        fileSha256: audioMsg.fileSha256 ? Buffer.from(audioMsg.fileSha256).toString('base64') : null,
+        directPath: audioMsg.directPath || null,
+        seconds: audioMsg.seconds || null,
+        ptt: audioMsg.ptt || false,
+      },
+      text: '',
+    };
+  }
+
+  // Mensagem de documento
+  if (msg.documentMessage) {
+    const docMsg = msg.documentMessage;
+    return {
+      type: 'document',
+      content: {
+        fileName: docMsg.fileName || null,
+        mimetype: docMsg.mimetype || 'application/octet-stream',
+        url: docMsg.url || null,
+        fileLength: docMsg.fileLength || docMsg.fileLengthLow || null,
+        mediaKey: docMsg.mediaKey ? Buffer.from(docMsg.mediaKey).toString('base64') : null,
+        fileEncSha256: docMsg.fileEncSha256 ? Buffer.from(docMsg.fileEncSha256).toString('base64') : null,
+        fileSha256: docMsg.fileSha256 ? Buffer.from(docMsg.fileSha256).toString('base64') : null,
+        directPath: docMsg.directPath || null,
+        caption: docMsg.caption || null,
+      },
+      text: docMsg.caption || docMsg.fileName || '',
+    };
+  }
+
+  // Sticker
+  if (msg.stickerMessage) {
+    const stickerMsg = msg.stickerMessage;
+    return {
+      type: 'sticker',
+      content: {
+        mimetype: stickerMsg.mimetype || 'image/webp',
+        url: stickerMsg.url || null,
+        fileLength: stickerMsg.fileLength || stickerMsg.fileLengthLow || null,
+        mediaKey: stickerMsg.mediaKey ? Buffer.from(stickerMsg.mediaKey).toString('base64') : null,
+        fileEncSha256: stickerMsg.fileEncSha256 ? Buffer.from(stickerMsg.fileEncSha256).toString('base64') : null,
+        fileSha256: stickerMsg.fileSha256 ? Buffer.from(stickerMsg.fileSha256).toString('base64') : null,
+        directPath: stickerMsg.directPath || null,
+      },
+      text: '',
+    };
+  }
+
+  // Tipo desconhecido
+  return {
+    type: 'unknown',
+    content: msg,
+    text: '',
+  };
+}
+
+/**
+ * Tenta fazer download da mídia e converter para base64 (opcional)
+ */
+async function downloadMediaAsBase64(socket, message, messageType) {
+  try {
+    // Tenta primeiro com o objeto message.message (formato interno do Baileys)
+    let buffer;
+    try {
+      const downloadTarget = message.message || message;
+      buffer = await downloadMediaMessage(
+        downloadTarget,
+        'buffer',
+        {},
+        { logger: socket.logger },
+      );
+    } catch (firstErr) {
+      // Fallback: tenta com a mensagem completa
+      buffer = await downloadMediaMessage(
+        message,
+        'buffer',
+        {},
+        { logger: socket.logger },
+      );
+    }
+
+    if (buffer && Buffer.isBuffer(buffer)) {
+      return {
+        base64: buffer.toString('base64'),
+        size: buffer.length,
+      };
+    }
+  } catch (err) {
+    console.warn('[Baileys] Falha ao fazer download da mídia:', err.message);
+  }
+  return null;
+}
+
 async function defaultMessageHandler({
   socket,
   message,
@@ -156,13 +326,12 @@ async function defaultMessageHandler({
 }) {
   const remoteJid = message.key.remoteJid;
   const pushName = message.pushName || 'Contato';
-  const text =
-    message.message?.conversation ||
-    message.message?.extendedTextMessage?.text ||
-    '';
-  const messageType = message.message
-    ? Object.keys(message.message)[0]
-    : 'unknown';
+  const messageId = message.key?.id;
+  
+  // Extrair conteúdo estruturado da mensagem
+  const { type: messageType, content, text } = extractMessageContent(message);
+
+  // Processar timestamp
   const rawTimestamp = message.messageTimestamp;
   const timestamp = (() => {
     if (typeof rawTimestamp === 'number') {
@@ -179,26 +348,55 @@ async function defaultMessageHandler({
     return Date.now();
   })();
 
-  await sendWebhookNotification(
-    webhookUrl,
-    {
-      event: 'message.received',
-      timestamp: new Date().toISOString(),
-      data: {
-        remoteJid,
-        pushName,
-        messageId: message.key?.id,
-        messageType,
-        text,
-        timestamp,
-        rawMessage: message.message,
-      },
+  // Preparar payload do webhook
+  const webhookPayload = {
+    event: 'message.received',
+    timestamp: new Date().toISOString(),
+    data: {
+      remoteJid,
+      pushName,
+      messageId,
+      messageType,
+      text,
+      timestamp,
+      content,
+      // Incluir rawMessage para referência completa
+      rawMessage: message.message,
     },
-    webhookTimeoutMs,
-  );
+  };
 
-  console.log(`[Baileys] Mensagem recebida de ${pushName}: ${text}`);
+  // Para mensagens de mídia, tentar fazer download opcionalmente
+  // (pode ser desabilitado se for muito pesado)
+  const mediaTypes = ['image', 'video', 'audio', 'document', 'sticker'];
+  if (mediaTypes.includes(messageType) && process.env.BAILEYS_DOWNLOAD_MEDIA === 'true') {
+    try {
+      const mediaData = await downloadMediaAsBase64(socket, message, messageType);
+      if (mediaData) {
+        webhookPayload.data.media = {
+          base64: mediaData.base64,
+          size: mediaData.size,
+        };
+      }
+    } catch (err) {
+      console.warn('[Baileys] Erro ao processar mídia para webhook:', err.message);
+    }
+  }
 
+  // Enviar webhook
+  await sendWebhookNotification(webhookUrl, webhookPayload, webhookTimeoutMs);
+
+  // Log da mensagem recebida
+  const logText = messageType === 'image' && content?.caption
+    ? `[Imagem] ${content.caption}`
+    : messageType === 'video' && content?.caption
+    ? `[Vídeo] ${content.caption}`
+    : messageType === 'document'
+    ? `[Documento] ${content?.fileName || 'Sem nome'}`
+    : text || `[${messageType}]`;
+
+  console.log(`[Baileys] Mensagem recebida de ${pushName}: ${logText}`);
+
+  // Resposta automática para ping
   if (text.trim().toLowerCase() === 'ping') {
     await socket.sendMessage(remoteJid, { text: 'pong' });
   }

@@ -1,0 +1,13 @@
+node_modules
+logs
+.cache
+coverage
+.nyc_output
+.env*
+auth_data
+storage
+*.log
+*.md
+*.sqlite
+.git
+tmp

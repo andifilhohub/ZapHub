@@ -11,6 +11,7 @@ const config = {
   server: {
     port: parseInt(process.env.PORT, 10) || 3000,
     logLevel: process.env.LOG_LEVEL || 'info',
+    publicUrl: process.env.SERVER_PUBLIC_URL || null,
   },
 
   db: {
@@ -55,11 +56,32 @@ const config = {
     retryAttempts: parseInt(process.env.WEBHOOK_RETRY_ATTEMPTS, 10) || 3,
     retryDelay: parseInt(process.env.WEBHOOK_RETRY_DELAY_MS, 10) || 2000, // 2 seconds base
     maxBodySize: parseInt(process.env.WEBHOOK_MAX_BODY_SIZE, 10) || 1048576, // 1MB
+    signatureSecret: process.env.WEBHOOK_SIGNATURE_SECRET || '',
   },
 
   metrics: {
     enabled: process.env.METRICS_ENABLED !== 'false',
     port: parseInt(process.env.METRICS_PORT, 10) || 9090,
+  },
+
+  media: {
+    storage: process.env.MEDIA_STORAGE || 'local',
+    retentionDays: parseInt(process.env.MEDIA_RETENTION_DAYS, 10) || 30,
+    local: {
+      basePath: process.env.MEDIA_LOCAL_BASE_PATH || path.join(process.cwd(), 'storage', 'media'),
+      baseUrl: process.env.MEDIA_LOCAL_BASE_URL || null,
+      serveStatic: process.env.MEDIA_LOCAL_SERVE_STATIC !== 'false',
+    },
+    s3: {
+      bucket: process.env.MEDIA_S3_BUCKET || '',
+      region: process.env.MEDIA_S3_REGION || 'us-east-1',
+      endpoint: process.env.MEDIA_S3_ENDPOINT || undefined,
+      accessKeyId: process.env.MEDIA_S3_ACCESS_KEY || undefined,
+      secretAccessKey: process.env.MEDIA_S3_SECRET_KEY || undefined,
+      forcePathStyle: process.env.MEDIA_S3_FORCE_PATH_STYLE === 'true',
+      baseUrl: process.env.MEDIA_S3_BASE_URL || null,
+      acl: process.env.MEDIA_S3_ACL || 'private',
+    },
   },
 };
 

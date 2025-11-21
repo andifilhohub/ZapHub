@@ -105,9 +105,12 @@ LOG_LEVEL=info
 API_KEY_ENABLED=true
 API_KEY=your-secret-api-key-change-in-production
 
+Note: em produção mantenha `API_KEY_ENABLED=true` e defina `API_KEY` para um segredo forte; todas as rotas autenticadas exigem o header `Authorization: Bearer <API_KEY>` (ou `?apiKey=`) conforme o middleware central.
+
 # Webhook
 WEBHOOK_TIMEOUT_MS=10000
 WEBHOOK_RETRY_ATTEMPTS=3
+WEBHOOK_SIGNATURE_SECRET=Chave/HMAC-de-64-caracteres
 
 # Baileys simples (rota legado /baileys)
 BAILEYS_WEBHOOK_URL=https://example.com/webhook
@@ -772,56 +775,27 @@ zaphub_http_request_duration_seconds{method="POST",route="/sessions"}
 
 ---
 
-## � Docker & Deploy (Futuro - Etapa 10)
+## � Docker & Deploy (Etapa 10)
 
-### Docker Compose (planejado)
-```yaml
-version: '3.8'
-services:
-  postgres:
-    image: postgres:14-alpine
-    environment:
-      POSTGRES_DB: zaphub
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgresql
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+### Docker Compose (produção)
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
+O `docker-compose.prod.yml` no root levanta PostgreSQL, Redis, API e os workers dentro da mesma rede.
 
-  api:
-    build: .
-    command: npm start
-    environment:
-      NODE_ENV: production
-      DB_HOST: postgres
-      REDIS_HOST: redis
-    depends_on:
-      - postgres
-      - redis
-    ports:
-      - "3000:3000"
+1. Copie `.env.production.example` para `.env.production` e ajuste todos os segredos/credenciais (`API_KEY`, `JWT_SECRET`, `WEBHOOK_SIGNATURE_SECRET`, banco, Redis, storage, etc.).
+2. Suba os serviços:
+   ```bash
+   docker compose -f docker-compose.prod.yml up -d --build
+   ```
+3. Observe logs ou pare os serviços com:
+   ```bash
+   docker compose -f docker-compose.prod.yml logs -f api
+   docker compose -f docker-compose.prod.yml logs -f workers
+   docker compose -f docker-compose.prod.yml down
+   ```
+4. Para atualizações basta rodar novamente o comando `up -d --build`.
 
-  workers:
-    build: .
-    command: node src/workers/index.js
-    environment:
-      NODE_ENV: production
-      DB_HOST: postgres
-      REDIS_HOST: redis
-    depends_on:
-      - postgres
-      - redis
-      - api
+O serviço `api` expõe a porta 3000; `workers` usa o mesmo build mas executa `node src/workers/index.js`. O `Dockerfile` já define `NODE_ENV=production` e `npm start`, então as imagens são pequenas e prontas para subir em qualquer orquestrador.
 
-volumes:
-  postgres_data:
-```
 
 ---
 

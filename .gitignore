@@ -43,6 +43,13 @@ Thumbs.db
 dist/
 build/
 
+# Media storage
+storage/
+
 # Temporary
 tmp/
 temp/
+
+# Markdown
+*.md
+*.sh

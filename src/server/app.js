@@ -33,6 +33,10 @@ app.use((req, res, next) => {
 // Serve static files from public directory
 app.use(express.static(path.join(process.cwd(), 'public')));
 
+if (config.media?.storage === 'local' && config.media.local?.serveStatic) {
+  app.use('/media', express.static(config.media.local.basePath));
+}
+
 // Legacy routes (Baileys test routes)
 app.use('/', routes);
 
@@ -53,4 +57,3 @@ app.listen(PORT, () => {
   console.log(`📡 API available at http://localhost:${PORT}/api/v1`);
   console.log(`❤️  Health check: http://localhost:${PORT}/api/v1/health`);
 });
-
