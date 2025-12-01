@@ -1,6 +1,9 @@
 import makeWASocket, {
+  Browsers,
   DisconnectReason,
   fetchLatestBaileysVersion,
+  isJidBroadcast,
+  makeCacheableSignalKeyStore,
   useMultiFileAuthState,
   WAMessageStubType,
 } from '@whiskeysockets/baileys';
@@ -9,6 +12,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import util from 'node:util';
 import Pino from 'pino';
+import NodeCache from '@cacheable/node-cache';
 import config from '../../config/index.js';
 import logger from '../lib/logger.js';
 import { getSessionById, updateSession } from '../db/repositories/sessions.js';
@@ -170,6 +174,10 @@ class ConnectionManager {
 
       // Get latest Baileys version
       const { version, isLatest } = await fetchLatestBaileysVersion();
+      logger.info(
+        { sessionId, whatsappWebVersion: version.join('.'), isLatest },
+        '[ConnectionManager] Using WhatsApp Web version'
+      );
       if (!isLatest) {
         logger.warn(
           { sessionId, version: version.join('.') },
@@ -185,15 +193,25 @@ class ConnectionManager {
           : undefined,
       });
 
+      // Cache usado pelo Baileys para controlar tentativas de retry de mensagens
+      const msgRetryCounterCache = new NodeCache({ stdTTL: 60 * 60, useClones: false });
+
       // Create socket
       const socket = makeWASocket({
         version,
-        auth: state,
+        auth: {
+          creds: state.creds,
+          keys: makeCacheableSignalKeyStore(state.keys, baileysLogger),
+        },
         printQRInTerminal: false,
         logger: baileysLogger,
         markOnlineOnConnect: true,
         syncFullHistory: false,
-        browser: ['ZapHub', 'Chrome', '120.0.0'],
+        browser: ["Windows", "Chrome", "Chrome 114.0.5735.198"],
+
+        //browser: Browsers.appropriate('Desktop'),
+        msgRetryCounterCache,
+        shouldIgnoreJid: (jid) => isJidBroadcast(jid),
         getMessage: async (key) => {
           // TODO: Implement message retrieval from DB if needed
           return { conversation: '' };
