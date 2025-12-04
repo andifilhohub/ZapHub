@@ -454,7 +454,7 @@ class ConnectionManager {
 
       await upsertContacts(sessionId, normalizedContacts);
 
-      const simplified = contacts.map((contact) => ({
+      const simplified = normalizedContacts.map((contact) => ({
         jid: contact.jid || contact.id,
         lid: contact.lid || null,
         name: contact.name || null,
@@ -755,6 +755,23 @@ class ConnectionManager {
         const lidDetected = [chatId, participant, message.key?.participant, message.key?.author].some(
           (jid) => jid?.includes('@lid')
         );
+
+        // If Baileys sent @lid identifiers, try to immediately persist/merge a resolved
+        // contact using the phone JID present in senderPn/participantPn. This prevents
+        // us from saving/sending with the @lid placeholder later.
+        await this._persistResolvedContactFromMessage(sessionId, socket, {
+          rawJid: rawChatId,
+          resolvedJid: chatId,
+          fallbackJid: senderPn,
+          displayName: senderName,
+        });
+
+        await this._persistResolvedContactFromMessage(sessionId, socket, {
+          rawJid: rawParticipant,
+          resolvedJid: participant,
+          fallbackJid: participantPn,
+          displayName: senderName,
+        });
 
         if (lidDetected) {
           logger.warn(
@@ -1659,16 +1676,108 @@ class ConnectionManager {
    * Resolve @lid JIDs using provided fallback phone JID when available
    */
   resolveJidFromLid(jid, fallbackJid) {
+    // If no jid provided, prefer the fallback (may be a phone or full JID)
     if (!jid) {
-      return fallbackJid || null;
+      return this._normalizeFallbackJid(fallbackJid) || null;
     }
 
-    const isLid = jid.endsWith('@lid');
+    const isLid = typeof jid === 'string' && jid.endsWith('@lid');
     if (isLid && fallbackJid) {
-      return fallbackJid;
+      const normalized = this._normalizeFallbackJid(fallbackJid);
+      logger.info({ jid, fallbackJid: normalized }, '[ConnectionManager] Resolved @lid using fallback');
+      return normalized || jid;
     }
 
     return jid;
+  }
+
+  /**
+   * Normalize a fallback JID (senderPn / participantPn) into a full JID.
+   * - If value already contains '@', return as-is
+   * - If it's a numeric phone (digits, optional +), strip non-digits and append @s.whatsapp.net
+   */
+  _normalizeFallbackJid(value) {
+    if (!value) return null;
+    if (typeof value !== 'string') return null;
+
+    // If it already looks like a JID, keep it
+    if (value.includes('@')) return value;
+
+    // Strip non-digits (handles +, spaces, parentheses)
+    const digits = value.replace(/\D+/g, '');
+    if (!digits) return null;
+
+    return `${digits}@s.whatsapp.net`;
+  }
+
+  /**
+   * Merge a resolved contact into the in-memory Baileys store so subsequent lookups
+   * (including sendMessage resolution) can find the non-@lid JID.
+   */
+  _mergeContactIntoStore(socket, contact) {
+    if (!socket || !contact?.jid) return;
+
+    const stores = [socket.store?.contacts, socket.contacts].filter(Boolean);
+    const assignContact = (store) => {
+      if (!store) return;
+
+      const existing = store[contact.jid] || store[contact.id] || store[contact.lid];
+      const merged = { ...(existing || {}) };
+
+      for (const key of ['id', 'jid', 'wid', 'lid', 'name', 'notify', 'pushName']) {
+        const value = contact[key];
+        if (value !== undefined && value !== null) {
+          merged[key] = value;
+        }
+      }
+
+      store[contact.jid] = merged;
+      if (contact.lid && contact.lid !== contact.jid) {
+        store[contact.lid] = merged;
+      }
+    };
+
+    stores.forEach(assignContact);
+  }
+
+  /**
+   * When a message arrives with @lid identifiers, use senderPn/participantPn as a
+   * fallback to persist the real JID in DB and cache.
+   */
+  async _persistResolvedContactFromMessage(sessionId, socket, { rawJid, resolvedJid, fallbackJid, displayName }) {
+    const isLid = typeof rawJid === 'string' && rawJid.endsWith('@lid');
+    if (!isLid) return;
+
+    const normalizedFallback = this._normalizeFallbackJid(fallbackJid);
+    const resolved =
+      (resolvedJid && typeof resolvedJid === 'string' && !resolvedJid.endsWith('@lid')
+        ? resolvedJid
+        : null) || normalizedFallback;
+
+    if (!resolved || resolved.endsWith('@lid')) {
+      return;
+    }
+
+    const contact = {
+      id: resolved,
+      jid: resolved,
+      wid: resolved,
+      lid: rawJid,
+      name: displayName || null,
+      notify: displayName || null,
+      pushName: displayName || null,
+    };
+
+    this._mergeContactIntoStore(socket, contact);
+
+    try {
+      await upsertContacts(sessionId, [contact]);
+    } catch (err) {
+      logger.warn(
+        { sessionId, rawJid, resolvedJid: resolved, error: err.message },
+        '[ConnectionManager] Failed to persist resolved contact from @lid message'
+      );
+    }
   }
 
   /**
