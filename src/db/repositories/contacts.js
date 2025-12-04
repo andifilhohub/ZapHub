@@ -8,7 +8,26 @@ function normalizePhoneNumber(jid) {
 }
 
 function mapContactRecord(sessionId, contact) {
-  const primaryJid = contact.jid || contact.id || contact.lid || null;
+  // Prefer an explicit, resolved JID. Baileys may emit temporary `@lid` identifiers
+  // in some events; avoid persisting those if a resolved JID is available.
+  let primaryJid = contact.jid || contact.id || contact.lid || null;
+
+  // If primaryJid is an @lid placeholder, try to prefer a non-@lid alternative
+  if (primaryJid && typeof primaryJid === 'string' && primaryJid.endsWith('@lid')) {
+    if (contact.id && typeof contact.id === 'string' && !contact.id.endsWith('@lid')) {
+      primaryJid = contact.id;
+    } else if (contact.lid && typeof contact.lid === 'string' && !contact.lid.endsWith('@lid')) {
+      primaryJid = contact.lid;
+    } else {
+      // As a last resort, try to derive a phone JID from any phone-like field
+      const phone = normalizePhoneNumber(contact.jid) || normalizePhoneNumber(contact.id) || null;
+      if (phone) {
+        // Use the common WhatsApp phone JID form. This may be c.us or s.whatsapp.net depending on context;
+        // s.whatsapp.net is used elsewhere in the codebase, so use that for consistency.
+        primaryJid = `${phone}@s.whatsapp.net`;
+      }
+    }
+  }
 
   return {
     sessionId,

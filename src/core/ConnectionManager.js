@@ -421,7 +421,38 @@ class ConnectionManager {
     try {
       if (!contacts?.length) return;
 
-      await upsertContacts(sessionId, contacts);
+      // Defensive normalization: Baileys may emit temporary `@lid` identifiers.
+      // Prefer a resolved JID when possible (contact.id), otherwise try to
+      // derive a phone JID from the available fields so we don't persist
+      // `@lid` values in the DB.
+      const normalizedContacts = contacts.map((c) => {
+        if (!c) return c;
+        const contact = { ...c };
+
+        try {
+          const jid = contact.jid || contact.id || contact.lid || null;
+          if (jid && typeof jid === 'string' && jid.endsWith('@lid')) {
+            // prefer contact.id if it's not an @lid
+            if (contact.id && typeof contact.id === 'string' && !contact.id.endsWith('@lid')) {
+              contact.jid = contact.id;
+            } else if (contact.lid && typeof contact.lid === 'string' && !contact.lid.endsWith('@lid')) {
+              contact.jid = contact.lid;
+            } else {
+              // derive phone from any available field (jid or id)
+              const phone = (contact.jid || contact.id || '').split('@')[0];
+              if (phone) {
+                contact.jid = `${phone}@s.whatsapp.net`;
+              }
+            }
+          }
+        } catch (e) {
+          // if anything unexpected happens, keep the original contact object
+        }
+
+        return contact;
+      });
+
+      await upsertContacts(sessionId, normalizedContacts);
 
       const simplified = contacts.map((contact) => ({
         jid: contact.jid || contact.id,
@@ -1875,6 +1906,55 @@ class ConnectionManager {
     }
 
     try {
+      // If recipient is an @lid placeholder, try to resolve it using the
+      // Baileys socket store (contacts). Many events contain senderPn which
+      // is the true phone JID; however external callers may pass a @lid value
+      // (for example, forwarded raw events). Attempt to resolve to a real
+      // JID before sending. If we can't resolve, fail with a helpful error.
+      if (typeof jid === 'string' && jid.endsWith('@lid')) {
+        try {
+          const storeContacts = (socket.store && socket.store.contacts) || socket.contacts || {};
+          let resolved = null;
+
+          for (const key of Object.keys(storeContacts)) {
+            const c = storeContacts[key];
+            if (!c) continue;
+            // contact.lid is how Baileys exposes the lid value in some stores
+            if (c.lid === jid || c.id === jid || c.jid === jid) {
+              // Prefer a non-@lid id/jid/wid when available
+              if (c.id && typeof c.id === 'string' && !c.id.endsWith('@lid')) {
+                resolved = c.id;
+                break;
+              }
+              if (c.jid && typeof c.jid === 'string' && !c.jid.endsWith('@lid')) {
+                resolved = c.jid;
+                break;
+              }
+              if (c.wid && typeof c.wid === 'string' && !c.wid.endsWith('@lid')) {
+                resolved = c.wid;
+                break;
+              }
+            }
+            // Some stores put lid inside metadata or different fields; be forgiving
+            if (c?.lid === jid && (c.id || c.jid || c.wid)) {
+              resolved = c.id || c.jid || c.wid;
+              if (resolved && !resolved.endsWith('@lid')) break;
+            }
+          }
+
+          if (resolved) {
+            logger.info({ sessionId, originalJid: jid, resolvedJid: resolved }, '[ConnectionManager] Resolved @lid to real JID for send');
+            jid = resolved;
+          } else {
+            logger.warn({ sessionId, jid }, '[ConnectionManager] Could not resolve @lid recipient from socket store');
+            throw new Error('Cannot send to @lid recipient: unresolved. Use the real phone JID (senderPn) or wait for contact sync.');
+          }
+        } catch (err) {
+          // bubble a clear error to the caller/worker
+          throw new Error(`Failed to resolve @lid recipient: ${err.message}`);
+        }
+      }
+
       logger.info({ sessionId, jid, options }, '[ConnectionManager] Sending message...');
 
       // If sending to status@broadcast, statusJidList must be in OPTIONS, not content
